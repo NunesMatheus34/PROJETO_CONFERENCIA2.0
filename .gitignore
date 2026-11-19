@@ -1,0 +1,10 @@
+EXEMPLOS/
+exemplos/
+_referencia/
+referencia/
+*.xlsx
+*.xls
+*.pdf
+*.PDF
+*.RET
+*.ret
