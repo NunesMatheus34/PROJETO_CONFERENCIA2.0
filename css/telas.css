@@ -1,0 +1,95 @@
+/* =====================================================================
+   PEÇAS DAS TELAS
+   Cabeçalho de tela, caixas de envio de arquivo, cartões de resumo,
+   abas, tabela de resultado e etiquetas de status. Usa só as variáveis
+   de css/base.css. As telas (js/telas/) montam estas peças.
+   ===================================================================== */
+
+/* ---------- Cabeçalho de cada tela ---------- */
+.tela-cabecalho{margin-bottom:var(--esp-5)}
+.sobretitulo{font-size:12px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--texto-fraco)}
+.tela-descricao{margin-top:var(--esp-1);color:var(--texto-fraco);max-width:720px}
+
+/* bloco branco genérico (área de envio, tabela, texto da Ajuda) */
+.bloco{
+  background:var(--superficie);border:1px solid var(--borda);border-radius:var(--raio);
+  padding:var(--esp-5);box-shadow:var(--sombra);
+}
+.bloco + .bloco, .bloco + .mensagem, .mensagem + .bloco{margin-top:var(--esp-4)}
+
+/* ---------- Caixas de envio de arquivo (clicar ou arrastar) ---------- */
+.envios{display:grid;grid-template-columns:repeat(auto-fit, minmax(260px, 1fr));gap:var(--esp-4)}
+.caixa-envio{
+  position:relative;display:flex;flex-direction:column;align-items:flex-start;gap:var(--esp-1);
+  padding:var(--esp-5);border:1.5px dashed var(--borda-forte);border-radius:var(--raio);
+  background:var(--superficie-suave);cursor:pointer;
+}
+.caixa-envio:hover,.caixa-envio.arrastando{border-color:var(--destaque);background:var(--destaque-claro)}
+.caixa-envio.escolhido{border-style:solid;border-color:var(--ok-texto);background:var(--ok-fundo)}
+.caixa-envio:focus-within{outline:2px solid var(--destaque);outline-offset:2px}
+.caixa-envio-input{position:absolute;opacity:0;width:1px;height:1px}
+.caixa-envio .ico{width:24px;height:24px;color:var(--destaque);margin-bottom:var(--esp-1)}
+.caixa-envio-titulo{font-weight:600}
+.caixa-envio-dica{font-size:13px;color:var(--texto-fraco)}
+.caixa-envio-arquivo{margin-top:var(--esp-2);font-size:13px;font-weight:500;word-break:break-all}
+.caixa-envio.escolhido .caixa-envio-arquivo{color:var(--ok-texto)}
+
+.acoes{display:flex;flex-wrap:wrap;gap:var(--esp-3);margin-top:var(--esp-4)}
+
+/* ---------- Cartões de resumo (quantidade e total de cada status) ---------- */
+.cartoes{display:grid;grid-template-columns:repeat(auto-fit, minmax(180px, 1fr));gap:var(--esp-3)}
+.cartao{
+  background:var(--superficie);border:1px solid var(--borda);border-top:4px solid var(--cor, var(--borda-forte));
+  border-radius:var(--raio);padding:var(--esp-3) var(--esp-4);box-shadow:var(--sombra);
+}
+.cartao-nome{font-size:13px;font-weight:500;color:var(--texto-fraco)}
+.cartao-qtd{font-family:var(--fonte-numeros);font-size:24px;font-weight:600;color:var(--cor, var(--texto))}
+.cartao-total{font-family:var(--fonte-numeros);font-size:14px;color:var(--texto-fraco)}
+
+/* cada status aponta para a sua cor; cartões, abas e etiquetas usam --cor e --cor-fundo */
+.st-ok    {--cor:var(--ok-texto);    --cor-fundo:var(--ok-fundo)}
+.st-aviso {--cor:var(--aviso-texto); --cor-fundo:var(--aviso-fundo)}
+.st-alerta{--cor:var(--alerta-texto);--cor-fundo:var(--alerta-fundo)}
+.st-neutro{--cor:var(--neutro-texto);--cor-fundo:var(--neutro-fundo)}
+
+/* ---------- Abas ---------- */
+.abas{display:flex;gap:var(--esp-1);border-bottom:1px solid var(--borda);overflow-x:auto;margin-top:var(--esp-5)}
+.aba{
+  font:inherit;font-size:14px;font-weight:500;white-space:nowrap;
+  padding:10px var(--esp-4);border:none;background:none;cursor:pointer;
+  color:var(--texto-fraco);border-bottom:2px solid transparent;margin-bottom:-1px;
+}
+.aba:hover{color:var(--texto)}
+.aba[aria-selected="true"]{color:var(--cor, var(--destaque));border-bottom-color:var(--cor, var(--destaque))}
+.aba-qtd{font-family:var(--fonte-numeros);font-size:12px;margin-left:6px;padding:1px 6px;border-radius:10px;background:var(--cor-fundo, var(--neutro-fundo))}
+
+/* ---------- Tabela de resultado ---------- */
+.tabela-caixa{overflow-x:auto;background:var(--superficie);border:1px solid var(--borda);border-top:none;border-radius:0 0 var(--raio) var(--raio)}
+.tabela{width:100%;border-collapse:collapse;font-size:14px}
+.tabela th{
+  text-align:left;font-size:12px;font-weight:600;letter-spacing:.03em;text-transform:uppercase;
+  color:var(--texto-fraco);background:var(--superficie-suave);
+  padding:10px var(--esp-3);border-bottom:1px solid var(--borda);white-space:nowrap;
+}
+.tabela td{padding:10px var(--esp-3);border-bottom:1px solid var(--borda);vertical-align:top}
+.tabela tbody tr:hover{background:var(--superficie-suave)}
+.tabela .num{text-align:right;font-family:var(--fonte-numeros);font-variant-numeric:tabular-nums;white-space:nowrap}
+.tabela tfoot td{font-weight:600;background:var(--superficie-suave);border-bottom:none}
+
+/* etiqueta de status dentro da tabela */
+.etiqueta{
+  display:inline-block;font-size:12px;font-weight:600;white-space:nowrap;
+  padding:2px 8px;border-radius:10px;background:var(--cor-fundo);color:var(--cor);
+}
+
+/* ---------- Texto corrido (Ajuda, Perfil) ---------- */
+.texto p + p{margin-top:var(--esp-3)}
+
+/* ---------- Celular ---------- */
+@media (max-width:760px){
+  .bloco{padding:var(--esp-4)}
+  .caixa-envio{padding:var(--esp-4)}
+  .cartoes{grid-template-columns:repeat(2, 1fr)}
+  .cartao-qtd{font-size:20px}
+  .acoes .botao{flex:1}
+}

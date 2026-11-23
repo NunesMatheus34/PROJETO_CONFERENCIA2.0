@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<!-- =====================================================================
+     TESTES DA CONFERÊNCIA DDA 2.0
+     Rodam sozinhos ao abrir a página e mostram verde (passou) ou vermelho
+     (falhou), com o placar no topo. Usam SÓ dados fictícios e as funções
+     do próprio site (js/), carregadas sem a tela.
+     Hoje cobrem: módulo de boleto (os testes do projeto antigo e mais
+     alguns bloqueios), leitura de Excel com o código como texto e o
+     identificaEmpresa.
+     ===================================================================== -->
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Testes da Conferência</title>
+
+<!-- a mesma biblioteca do index.html (mesma versão e mesmo hash de segurança) -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"
+        integrity="sha384-vtjasyidUo0kW94K5MXDXntzOJpQgBKXmE7e2Ga4LG0skTTLeBi97eFAXsqewJjw"
+        crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+
+<link rel="stylesheet" href="../css/base.css">
+<style>
+  /* só o desenho do placar e da lista; cores vêm de css/base.css */
+  body{padding:var(--esp-6) var(--esp-4)}
+  main{max-width:960px;margin:0 auto;padding:0}
+  .intro{margin-top:var(--esp-1);color:var(--texto-fraco)}
+  .placar{margin-top:var(--esp-5);font-size:18px;font-weight:600}
+  ol{list-style:none;margin-top:var(--esp-4);display:grid;gap:var(--esp-2)}
+  li{display:flex;gap:var(--esp-3);align-items:flex-start;padding:var(--esp-3) var(--esp-4);border-radius:var(--raio);
+     background:var(--superficie);border:1px solid var(--borda);border-left:5px solid var(--ok-texto)}
+  li.falha{border-left-color:var(--alerta-texto);background:var(--alerta-fundo)}
+  .marca{flex:none;width:24px;height:24px;border-radius:50%;display:grid;place-items:center;font-weight:700;font-size:13px;color:#fff;background:var(--ok-texto)}
+  li.falha .marca{background:var(--alerta-texto)}
+  .grupo-teste{font-size:12px;color:var(--texto-fraco);text-transform:uppercase;letter-spacing:.05em}
+  .nome{font-weight:600}
+  .detalhe{margin-top:2px;font-size:13px;color:var(--texto-fraco);font-family:var(--fonte-numeros);word-break:break-all}
+</style>
+</head>
+
+<body>
+<main>
+  <h1>Testes da Conferência DDA 2.0</h1>
+  <p class="intro">Rodam sozinhos ao abrir esta página, só com dados <b>fictícios</b>. Verde = passou, vermelho = falhou.</p>
+  <p class="placar mensagem mensagem-aviso" id="placar" role="status">Rodando os testes…</p>
+  <ol id="lista"></ol>
+</main>
+
+<!-- as funções do site, sem o js/app.js (que liga a tela) -->
+<script src="../js/leitura/formatos.js"></script>
+<script src="../js/leitura/planilha.js"></script>
+<script src="../js/empresas.js"></script>
+<script src="../js/boleto.js"></script>
+
+<script>
+/* ---------------------------------------------------------------------
+   Pequeno executor: cada teste() agrupa várias conferências (confere).
+   Um erro dentro do teste vira um resultado vermelho, sem parar os outros.
+   --------------------------------------------------------------------- */
+const resultados = [];
+let grupoAtual = '';
+
+// Guarda um resultado: nome do que foi conferido, se passou e um detalhe para quem lê.
+function confere(nome, passou, detalhe){
+  resultados.push({ grupo: grupoAtual, nome, passou: !!passou, detalhe: detalhe || '' });
+}
+
+// Roda um grupo de conferências; erro inesperado conta como falha.
+async function teste(nome, fn){
+  grupoAtual = nome;
+  try{ await fn(); }catch(err){ confere(nome, false, 'erro: ' + (err && err.message || err)); }
+}
+
+// Monta um Excel fictício (SheetJS) com as linhas dadas e devolve como File,
+// como se o usuário tivesse escolhido o arquivo. celulas: { 'A2': {t:'n', v:...} } troca células.
+function excelFicticio(linhas, celulas){
+  const aba = XLSX.utils.aoa_to_sheet(linhas);
+  Object.assign(aba, celulas || {});
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, aba, 'Planilha1');
+  const bytes = XLSX.write(wb, { type:'array', bookType:'xlsx' });
+  return new File([bytes], 'ficticio.xlsx');
+}
+
+// Desenha o placar e a lista (com textContent: o detalhe pode ter texto qualquer).
+function mostraResultados(){
+  const lista = document.getElementById('lista');
+  resultados.forEach(r => {
+    const li = document.createElement('li');
+    li.className = r.passou ? 'ok' : 'falha';
+    const marca = document.createElement('span');
+    marca.className = 'marca'; marca.setAttribute('aria-hidden', 'true');
+    marca.textContent = r.passou ? '✓' : '✗';
+    const corpo = document.createElement('div');
+    const grupo = document.createElement('p'); grupo.className = 'grupo-teste'; grupo.textContent = r.grupo;
+    const nome = document.createElement('p'); nome.className = 'nome'; nome.textContent = r.nome;
+    corpo.append(grupo, nome);
+    if(r.detalhe){ const d = document.createElement('p'); d.className = 'detalhe'; d.textContent = r.detalhe; corpo.append(d); }
+    li.append(marca, corpo);
+    lista.append(li);
+  });
+  const falhas = resultados.filter(r => !r.passou).length;
+  const placar = document.getElementById('placar');
+  placar.className = 'placar mensagem ' + (falhas ? 'mensagem-alerta' : 'mensagem-ok');
+  placar.textContent = falhas ? `✗ ${falhas} de ${resultados.length} testes falharam` : `✓ Todos os ${resultados.length} testes passaram`;
+  document.title = (falhas ? '✗ ' : '✓ ') + 'Testes da Conferência';
+  window.resultadoDosTestes = { total: resultados.length, falhas, resultados };
+}
+
+/* ---------------------------------------------------------------------
+   TESTES — só dados fictícios
+   --------------------------------------------------------------------- */
+async function rodaTestes(){
+  // boleto fictício: banco 341, R$ 1.234,56, vencimento 23/10/2026 (do projeto antigo)
+  const ESP = { banco:'341', valor:1234.56, venc:'23/10/2026' };
+  const CB = '34191160800001234561234567890123456789012345';
+  const LINHA = '34191234546789012345767890123457116080000123456';
+
+  // ---------- módulo de boleto (testes do projeto antigo) ----------
+  await teste('Boleto: código válido', () => {
+    const r = validaBoleto(CB, ESP);
+    const d = decodifica(CB);
+    confere('Código válido → linha digitável certa', r.ok && r.linha === LINHA, `linha ${r.linha}`);
+    confere('Código válido → banco 341, valor R$ 1.234,56, vencimento 23/10/2026',
+      d.banco === '341' && d.valor === 1234.56 && d.venc === '23/10/2026', `banco ${d.banco} · ${brl(d.valor)} · ${d.venc}`);
+    confere('Linha digitável → volta para o mesmo código de barras', linhaParaBarras(LINHA) === CB && validaBoleto(LINHA, ESP).cb === CB, linhaParaBarras(LINHA));
+  });
+
+  await teste('Boleto: um dígito trocado', () => {
+    const r = validaBoleto('34191234546789012345767891123457116080000123456', ESP);
+    confere('Um dígito trocado na linha → bloqueado, sem linha digitável', !r.ok && r.linha === '' && r.cb === '', r.motivo);
+  });
+
+  await teste('Boleto: código vindo como número', () => {
+    const r = validaBoleto('3.4191160800001234e+43', ESP);
+    confere('Código "3.4191160800001234e+43" → bloqueado como "ilegível"', !r.ok && r.linha === '' && /ilegível/.test(r.motivo), r.motivo);
+  });
+
+  // ---------- módulo de boleto (outros bloqueios do mesmo código antigo) ----------
+  await teste('Boleto: DVs', () => {
+    confere('DV geral (módulo 11) do código fictício = 1', dvMod11Geral(CB) === 1 && CB[4] === '1', `DV ${dvMod11Geral(CB)}`);
+    confere('DVs dos 3 campos (módulo 10) = 4, 7 e 7', dvMod10(LINHA.slice(0, 9)) === 4 && dvMod10(LINHA.slice(10, 20)) === 7 && dvMod10(LINHA.slice(21, 31)) === 7,
+      `${dvMod10(LINHA.slice(0, 9))}, ${dvMod10(LINHA.slice(10, 20))}, ${dvMod10(LINHA.slice(21, 31))}`);
+    const trocaDv = CB.slice(0, 4) + '2' + CB.slice(5);
+    const r = validaEstrutura(trocaDv);
+    confere('DV geral errado → bloqueado', !r.ok && /módulo 11/.test(r.motivo), r.motivo);
+  });
+
+  await teste('Boleto: comparação com o DDA', () => {
+    const banco = validaBoleto(CB, { ...ESP, banco:'237' });
+    confere('Banco do DDA diferente → bloqueado', !banco.ok && banco.linha === '' && /banco do código/.test(banco.motivo), banco.motivo);
+    const valor = validaBoleto(CB, { ...ESP, valor:1234.57 });
+    confere('Valor do DDA 1 centavo diferente → bloqueado', !valor.ok && valor.linha === '' && /valor do código/.test(valor.motivo), valor.motivo);
+    const venc = validaBoleto(CB, { ...ESP, venc:'24/10/2026' });
+    confere('Vencimento diferente → não bloqueia, só avisa', venc.ok && venc.avisos.length === 1, venc.avisos.join(' · '));
+  });
+
+  await teste('Boleto: o que não é boleto', () => {
+    const consumo = validaEstrutura('8' + '1'.repeat(47));
+    confere('48 dígitos começando com 8 → conta de consumo, sem linha', !consumo.ok && consumo.tipo === 'consumo' && consumo.linha === '', consumo.motivo);
+    const curto = validaEstrutura(CB.slice(0, 43));
+    confere('43 dígitos → bloqueado pelo tamanho', !curto.ok && /tem 43 dígitos/.test(curto.motivo), curto.motivo);
+    const letra = validaEstrutura(CB.slice(0, 10) + 'A' + CB.slice(11));
+    confere('Letra no meio do código → bloqueado', !letra.ok && /não são números/.test(letra.motivo), letra.motivo);
+    const vazio = validaEstrutura('');
+    confere('Sem código → bloqueado', !vazio.ok && /sem código/.test(vazio.motivo), vazio.motivo);
+  });
+
+  await teste('Boleto: formato impresso', () => {
+    confere('Linha formatada com pontos e espaços, sem mudar nenhum dígito',
+      formataLinha(LINHA) === '34191.23454 67890.123457 67890.123457 1 16080000123456' && apenasDigitos(formataLinha(LINHA)) === LINHA, formataLinha(LINHA));
+  });
+
+  // ---------- leitura do Excel: código como texto ----------
+  await teste('Leitura: código de barras no Excel', async () => {
+    const arq = excelFicticio([['Código de barras'], [CB], [null]], { A3: { t:'n', v:Number(CB) } });
+    const leitura = await lerMatrizComTexto(arq);
+    const texto = codigoBarrasDaCelula(leitura, 1, 0);
+    confere('Código gravado como texto → os 44 dígitos iguais, não suspeito', !texto.suspeito && texto.digitos === CB && validaBoleto(leitura.textoDe(1, 0).texto, ESP).ok, texto.digitos);
+    const numero = codigoBarrasDaCelula(leitura, 2, 0);
+    const v = validaEstrutura(leitura.textoDe(2, 0).texto);
+    confere('Código gravado como número → suspeito e bloqueado (nunca vira os 44 dígitos certos)',
+      numero.suspeito && numero.digitos !== CB && !v.ok, `texto lido "${leitura.textoDe(2, 0).texto}" · ${v.motivo}`);
+    confere('Número da linha no Excel = 3 para a 3ª linha', leitura.linhaExcel(2) === 3, `linha ${leitura.linhaExcel(2)}`);
+  });
+
+  // ---------- identificaEmpresa (1ª linha fictícia de cada formato) ----------
+  await teste('Empresa: tudo em A1', () => {
+    const linha = (texto) => [[texto, null, null], ['outra linha']];
+    const casos = [
+      ['1 CRV INDUSTRIAL LTDA                    Empresa(s): 1 / 5 /   Data/Hora : 01/01/26 08:00:00', 'crv-matriz'],
+      ['5 CRV INDUSTRIAL LTDA                    Empresa(s): 1 / 5 /   Data/Hora : 01/01/26 08:00:00', 'crv-filial'],
+      ['1 RUBIATABA INDUSTRIAL S A               Empresa(s): 1 /   Data/Hora : 01/01/26 08:00:00', 'rubi-matriz'],
+      ['4 RUBIATABA INDUSTRIAL S A               Empresa(s): 1 / 4 /   Data/Hora : 01/01/26 08:00:00', 'rubi-filial'],
+    ];
+    casos.forEach(([texto, id]) => {
+      const e = identificaEmpresa(linha(texto));
+      confere(`"${texto.slice(0, 26).trim()} …" → ${id}`, e && e.id === id, e ? `${e.nome} · ${e.cnpj}` : 'null');
+    });
+  });
+
+  await teste('Empresa: número em A1 e nome em B1', async () => {
+    const e = identificaEmpresa([[5, 'CRV INDUSTRIAL LTDA                 ', 'Data/Hora :', 46000, '08:00:00']]);
+    confere('A1 = 5 (número), B1 = "CRV INDUSTRIAL LTDA" → CRV Filial', e && e.id === 'crv-filial', e ? e.nome : 'null');
+    const arq = excelFicticio([[1, 'Rubiatába Industrial S A', 'Data/Hora :'], ['outra linha']]);
+    const lido = identificaEmpresa((await lerMatrizComTexto(arq)).matriz);
+    confere('Mesmo formato lido de um Excel fictício, com acento e minúsculas → Rubi Matriz', lido && lido.id === 'rubi-matriz', lido ? lido.nome : 'null');
+  });
+
+  await teste('Empresa: não reconhece', () => {
+    const casos = [
+      [[['4 CRV INDUSTRIAL LTDA   Empresa(s): 1 / 4 /']], 'CRV com número 4 (não existe)'],
+      [[['5 RUBIATABA INDUSTRIAL S A   Empresa(s): 1 / 5 /']], 'Rubi com número 5 (não existe)'],
+      [[['1 EMPRESA FICTICIA QUALQUER LTDA   Empresa(s): 1 /']], 'outra empresa'],
+      [[['CRV INDUSTRIAL LTDA   Empresa(s): 1 / 5 /']], 'sem número no começo'],
+      [[['Pagador Eletrônico:', null, 'CPF/CNPJ:']], 'DDA do banco no lugar do relatório'],
+      [[[null, null, null]], '1ª linha vazia'],
+      [[], 'planilha vazia'],
+    ];
+    casos.forEach(([matriz, nome]) => {
+      const e = identificaEmpresa(matriz);
+      confere(`${nome} → null`, e === null, e ? e.nome : 'null');
+    });
+  });
+
+  mostraResultados();
+}
+
+rodaTestes().catch(err => {
+  const placar = document.getElementById('placar');
+  placar.className = 'placar mensagem mensagem-alerta';
+  placar.textContent = 'Os testes não rodaram: ' + (err && err.message || err);
+  window.resultadoDosTestes = { total: 0, falhas: 1, erro: String(err) };
+});
+</script>
+</body>
+</html>
