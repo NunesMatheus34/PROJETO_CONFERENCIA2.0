@@ -47,7 +47,7 @@ function abreMenuCelular(abrir){
 // Fecha a gaveta do menu (no computador não faz diferença).
 function fechaMenuCelular(){ abreMenuCelular(false); }
 
-// Liga o menu, o endereço e as caixas de envio que já existem no index.html.
+// Liga o menu, o endereço e as telas que já existem no index.html.
 function iniciaApp(){
   document.getElementById('menuAbrir').addEventListener('click', () =>
     abreMenuCelular(!document.body.classList.contains('menu-aberto')));
@@ -55,9 +55,8 @@ function iniciaApp(){
   document.addEventListener('keydown', e => { if(e.key === 'Escape') fechaMenuCelular(); });
   window.addEventListener('hashchange', sincronizaTela);
 
-  // Conferência DDA: por enquanto as caixas só mostram o nome do arquivo escolhido
-  // (a leitura e a conferência entram na próxima etapa)
-  ['ddaCaixaBanco', 'ddaCaixaSistema'].forEach(id => ligaCaixaEnvio(document.getElementById(id), () => {}));
+  // cada tela liga os seus próprios botões e caixas (js/telas/)
+  iniciaTelaDda();
 
   sincronizaTela();
 }

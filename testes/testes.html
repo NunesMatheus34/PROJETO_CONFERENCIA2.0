@@ -5,8 +5,9 @@
      (falhou), com o placar no topo. Usam SÓ dados fictícios e as funções
      do próprio site (js/), carregadas sem a tela.
      Hoje cobrem: módulo de boleto (os testes do projeto antigo e mais
-     alguns bloqueios), leitura de Excel com o código como texto e o
-     identificaEmpresa.
+     alguns bloqueios), leitura de Excel com o código como texto, o
+     identificaEmpresa e a Conferência DDA (um caso de cada status, as
+     travas de empresa, banco e conta, o filtro de unidade do Itaú e o Excel).
      ===================================================================== -->
 <html lang="pt-BR">
 <head>
@@ -18,8 +19,12 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"
         integrity="sha384-vtjasyidUo0kW94K5MXDXntzOJpQgBKXmE7e2Ga4LG0skTTLeBi97eFAXsqewJjw"
         crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"
+        integrity="sha384-Pqp51FUN2/qzfxZxBCtF0stpc9ONI6MYZpVqmo8m20SoaQCzf+arZvACkLkirlPz"
+        crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 
 <link rel="stylesheet" href="../css/base.css">
+<link rel="stylesheet" href="../css/telas.css">
 <style>
   /* só o desenho do placar e da lista; cores vêm de css/base.css */
   body{padding:var(--esp-6) var(--esp-4)}
@@ -46,11 +51,17 @@
   <ol id="lista"></ol>
 </main>
 
-<!-- as funções do site, sem o js/app.js (que liga a tela) -->
+<!-- as funções do site, sem o js/app.js (que liga o menu e as telas) -->
 <script src="../js/leitura/formatos.js"></script>
 <script src="../js/leitura/planilha.js"></script>
 <script src="../js/empresas.js"></script>
+<script src="../js/bancos/itau.js"></script>
+<script src="../js/bancos/santander.js"></script>
+<script src="../js/bancos/detecta.js"></script>
 <script src="../js/boleto.js"></script>
+<script src="../js/conferencias/dda.js"></script>
+<script src="../js/excel.js"></script>
+<script src="../js/telas/resultado.js"></script>
 
 <script>
 /* ---------------------------------------------------------------------
@@ -221,6 +232,118 @@ async function rodaTestes(){
       const e = identificaEmpresa(matriz);
       confere(`${nome} → null`, e === null, e ? e.nome : 'null');
     });
+  });
+
+  // ---------- Conferência DDA (só nomes e valores fictícios) ----------
+  const crvFilial = EMPRESAS.find(e => e.id === 'crv-filial');
+  const crvMatriz = EMPRESAS.find(e => e.id === 'crv-matriz');
+
+  // DDA do Santander fictício: linhas 1-4 com a conta (CNPJ da empresa dada), linha 5 cabeçalho, boletos depois
+  const ddaSantanderFicticio = (empresa, boletos) => [
+    ['Pagador Eletrônico:', null, 'CPF/CNPJ:', null, null],
+    ['EMPRESA FICTICIA', null, empresa.cnpj, null, null],
+    ['Situação do Título:', 'Todos em aberto', null, null, null],
+    ['Origem:', 'Todos', null, null, null],
+    ['Vencimento', 'Beneficiário', 'Nosso Número', 'Pagador', 'Valor'],
+    ...boletos.map((b, i) => [b.venc, b.nome, String(900000 + i), 'EMPRESA FICTICIA', b.valor]),
+  ];
+  // relatório do sistema fictício: 1ª linha da empresa, 6 linhas de topo, títulos depois (A venc, C nome, D NF, P saldo)
+  const relatorioFicticio = (primeiraLinha, titulos) => [
+    [primeiraLinha], [], [], [], [], ['Vencto', null, 'Fornecedor', 'Título'],
+    ...titulos.map(t => { const l = new Array(16).fill(null); l[0] = t.venc; l[2] = t.nome; l[3] = t.nf; l[15] = t.valor; return l; }),
+  ];
+  const LINHA_CRV_FILIAL = '5 CRV INDUSTRIAL LTDA      Empresa(s): 1 / 5 /   Data/Hora : 01/01/26 08:00:00';
+
+  // um boleto e um título para cada status
+  const BOLETOS = [
+    { venc:'20/11/2026', nome:'ALFA FICTICIA PECAS LTDA',  valor:100.00 },   // Conferidos
+    { venc:'21/11/2026', nome:'BETA FICTICIA TINTAS LTDA', valor:200.00 },   // Datas divergentes (sistema 25/11)
+    { venc:'20/11/2026', nome:'XPTO FOMENTO MERCANTIL',    valor:300.00 },   // Nome divergente (sistema: GAMA)
+    { venc:'20/11/2026', nome:'DELTA FICTICIA CABOS',      valor:400.00 },   // Só no banco
+    { venc:'20/11/2026', nome:'EPSILON FICTICIA VIDROS',   valor:600.00 },   // Conferidos com 1 centavo de diferença
+  ];
+  const TITULOS = [
+    { venc:'20/11/2026', nome:'ALFA FICTICIA PECAS',       nf:'1001', valor:100.00 },
+    { venc:'25/11/2026', nome:'BETA FICTICIA TINTAS',      nf:'1002', valor:200.00 },
+    { venc:'20/11/2026', nome:'GAMA FICTICIA MOVEIS',      nf:'1003', valor:300.00 },
+    { venc:'20/11/2026', nome:'ZETA FICTICIA LONAS',       nf:'1005', valor:500.00 },   // Só no sistema
+    { venc:'20/11/2026', nome:'EPSILON FICTICIA VIDROS',   nf:'1006', valor:600.01 },
+  ];
+
+  await teste('Conferência DDA: um de cada status', () => {
+    const r = conferir(leitorSantander(ddaSantanderFicticio(crvFilial, BOLETOS)), extraiSistema(relatorioFicticio(LINHA_CRV_FILIAL, TITULOS)));
+    const l = linhasDda(r);
+    const nomes = id => l[id].map(x => (x.banco || x.sistema).nome).join(', ');
+    confere('Conferidos: valor, nome e vencimento iguais (ALFA e EPSILON)', l.ok.length === 2 && /ALFA/.test(nomes('ok')) && /EPSILON/.test(nomes('ok')), nomes('ok'));
+    confere('Datas divergentes: valor e nome iguais, vencimento 21/11 × 25/11 (BETA)', l.data.length === 1 && /BETA/.test(nomes('data')), nomes('data'));
+    confere('Nome divergente: só o valor bate (XPTO FOMENTO × GAMA)', l.nome.length === 1 && l.nome[0].sistema.nome === 'GAMA FICTICIA MOVEIS', nomes('nome'));
+    confere('Só no banco: boleto de R$ 400,00 sem título (DELTA)', l.banco.length === 1 && /DELTA/.test(nomes('banco')), nomes('banco'));
+    confere('Só no sistema: título de R$ 500,00 sem boleto (ZETA)', l.sis.length === 1 && /ZETA/.test(nomes('sis')), nomes('sis'));
+    confere('Cartão de Conferidos soma o valor do BOLETO: R$ 700,00', somaValores(l.ok) === 700, brl(somaValores(l.ok)));
+  });
+
+  await teste('Conferência DDA: Excel', async () => {
+    const r = conferir(leitorSantander(ddaSantanderFicticio(crvFilial, BOLETOS)), extraiSistema(relatorioFicticio(LINHA_CRV_FILIAL, TITULOS)));
+    const abas = abasExcelDda(r, 'santander', 'todas');
+    confere('5 abas com os mesmos nomes e a mesma ordem da tela', abas.map(a => a.nome).join('|') === STATUS_DDA.map(s => s.nome).join('|'), abas.map(a => a.nome).join(' · '));
+    const ok = abas.find(a => a.status === 'ok');
+    const total = ok.linhas.reduce((s, l) => s + l[4], 0);
+    confere('Excel de Conferidos usa o SALDO DO SISTEMA (R$ 700,01), como no antigo', Math.round(total * 100) === 70001, brl(total));
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(await montaExcel(abas));
+    confere('Excel gerado abre e tem as 5 abas', wb.worksheets.length === 5 && wb.worksheets[0].name === 'Conferidos', wb.worksheets.map(w => w.name).join(' · '));
+  });
+
+  await teste('Conferência DDA: travas de empresa, banco e conta', () => {
+    const relMatriz = relatorioFicticio('1 CRV INDUSTRIAL LTDA      Empresa(s): 1 / 5 /   Data/Hora : 01/01/26 08:00:00', TITULOS);
+    const errado = checaRelatorioDda(crvFilial, relMatriz);
+    confere('Relatório da CRV Matriz com CRV Filial escolhida → bloqueado', /é da CRV Matriz/.test(errado) && /não foi feita/.test(errado), errado);
+    confere('Relatório da empresa escolhida → liberado', checaRelatorioDda(crvFilial, relatorioFicticio(LINHA_CRV_FILIAL, TITULOS)) === '', 'sem alerta');
+    const desconhecido = checaRelatorioDda(crvFilial, relatorioFicticio('RELATORIO QUALQUER', TITULOS));
+    confere('Relatório sem empresa reconhecida → bloqueado', /Não reconheci/.test(desconhecido), desconhecido);
+    const dda = ddaSantanderFicticio(crvFilial, BOLETOS);
+    const outroBanco = checaDda('itau', crvFilial, dda);
+    confere('DDA do Santander com Itaú escolhido → bloqueado', /DDA do Santander/.test(outroBanco.bloqueio), outroBanco.bloqueio);
+    const outraConta = checaDda('santander', crvMatriz, dda);
+    confere('DDA da conta da CRV Filial com CRV Matriz escolhida → bloqueado', /conta da CRV Filial/.test(outraConta.bloqueio), outraConta.bloqueio);
+    const certo = checaDda('santander', crvFilial, dda);
+    confere('DDA do banco e da conta certos → liberado', !certo.bloqueio && !certo.aviso, 'sem alerta');
+  });
+
+  await teste('Conferência DDA: Itaú', async () => {
+    const linhas = [
+      ['Dados da conta'], ['CPF/CNPJ: ' + crvFilial.cnpj], ['Data/Hora: 01/12/2026 às 09:00:00'],
+      ['Pagador/Agregado', 'Beneficiário', 'CPF/CNPJ', 'Venc.', 'Nº Doc.', 'Até Venc.', 'A Pagar', 'Tipo de Boleto', 'Banco', 'Observações', 'Código de barras'],
+      ['EMPRESA FICTICIA', 'ALFA FICTICIA PECAS LTDA', '00.000.000/0001-00', '20/11/2026', '0001001', 100, 95, 'DM', '341', '', CB],
+      ['EMPRESA FICTICIA - UNIDADE CAPINOPOLIS', 'BETA FICTICIA TINTAS LTDA', '00.000.000/0001-00', '21/11/2026', '1002', 200, 200, 'DM', '237', '', CB],
+    ];
+    const leitura = await lerMatrizComTexto(excelFicticio(linhas, { K6: { t:'n', v:Number(CB) } }));
+    const boletos = leitorItau(leitura);
+    confere('Lê 2 boletos, Nº Doc. como texto (zeros à esquerda) e "com desconto"',
+      boletos.length === 2 && boletos[0].doc === '0001001' && boletos[0].comDesconto && !boletos[1].comDesconto, boletos.map(b => b.doc).join(', '));
+    confere('Código de barras vem do TEXTO; o gravado como número fica marcado e não é mostrado',
+      boletos[0].codigoBarras === CB && !boletos[0].codigoSuspeito && boletos[1].codigoSuspeito && /ilegível/.test(codigoParaMostrar(boletos[1])), codigoParaMostrar(boletos[1]));
+    confere('Filtro de unidade: Todas 2 · CRV Industrial (sem Capinópolis) 1 · Unidade Capinópolis 1',
+      boletosDaUnidade(boletos, 'todas').length === 2 && boletosDaUnidade(boletos, 'sem-capinopolis')[0].beneficiario.startsWith('ALFA') &&
+      boletosDaUnidade(boletos, 'sem-capinopolis').length === 1 && boletosDaUnidade(boletos, 'capinopolis')[0].beneficiario.startsWith('BETA'), '');
+    confere('Nenhum nome de unidade usa "Matriz" (não confundir com a empresa CRV Matriz)',
+      Object.values(NOMES_UNIDADE).every(n => !/matriz/i.test(n)), Object.values(NOMES_UNIDADE).join(' · '));
+    confere('Data/hora da consulta e CNPJ da conta lidos do topo', dataHoraConsultaItau(leitura.matriz) === '01/12/2026 às 09:00:00' && cnpjDaContaDda(leitura.matriz) === apenasDigitos(crvFilial.cnpj), dataHoraConsultaItau(leitura.matriz));
+    const r = conferir(boletos, extraiSistema(relatorioFicticio(LINHA_CRV_FILIAL, TITULOS)));
+    confere('Itaú usa a mesma regra: ALFA conferido, BETA data divergente', r.ok.length === 1 && r.datasDiff.length === 1, `ok ${r.ok.length} · datas ${r.datasDiff.length}`);
+  });
+
+  await teste('Conferência DDA: tela', () => {
+    const area = document.createElement('div');
+    const desenho = ligaResultado({ area, status: STATUS_DDA, soma: somaValores, busca: buscaCasa,
+      vazio: { ok:'', data:'', nome:'', banco:'', sis:'' },
+      colunas: [{ cab:'Fornecedor', celula: l => l.banco.nome }, { cab:'Valor', classe:'num', celula: l => brl(l.valor) }] });
+    const l = linhasDda(conferir([{ venc:'', beneficiario:'<img src=x onerror=alert(1)>', valor:1, doc:'', cnpj:'', banco:'' }], []));
+    desenho.mostra(l);
+    area.querySelector('[data-status="banco"]').click();
+    const td = area.querySelector('tbody td');
+    confere('Nome com HTML aparece como texto (textContent), sem criar elemento', !area.querySelector('tbody img') && td.textContent.includes('<img'), td.textContent);
+    confere('Clicar no cartão abre a aba do status', area.querySelector('.aba[aria-selected="true"]').dataset.status === 'banco', '');
   });
 
   mostraResultados();

@@ -3,6 +3,8 @@
    Liga uma caixa onde o usuário clica para escolher o arquivo OU arrasta
    e solta. O arquivo não é enviado a lugar nenhum: só é entregue para a
    função da tela, que lê no próprio navegador.
+   A caixa pode ficar TRAVADA (ex.: antes de escolher banco e empresa):
+   aí nem o clique nem o arrastar aceitam arquivo.
    Marcação esperada (ver index.html):
      <label class="caixa-envio"> <input type="file" class="caixa-envio-input"> ...
        <span class="caixa-envio-arquivo">Nenhum arquivo escolhido</span> </label>
@@ -18,10 +20,11 @@ function ligaCaixaEnvio(caixa, aoEscolher){
 
   // destaca a caixa enquanto o arquivo está sendo arrastado por cima dela
   ['dragover', 'dragenter'].forEach(ev =>
-    caixa.addEventListener(ev, e => { e.preventDefault(); caixa.classList.add('arrastando'); }));
+    caixa.addEventListener(ev, e => { e.preventDefault(); if(!entrada.disabled) caixa.classList.add('arrastando'); }));
   ['dragleave', 'drop'].forEach(ev =>
     caixa.addEventListener(ev, e => { e.preventDefault(); caixa.classList.remove('arrastando'); }));
   caixa.addEventListener('drop', e => {
+    if(entrada.disabled) return;            // caixa travada: ignora o arquivo solto
     const arquivo = e.dataTransfer.files[0];
     if(arquivo){ entrada.files = e.dataTransfer.files; aceita(arquivo); }
   });
@@ -32,4 +35,20 @@ function ligaCaixaEnvio(caixa, aoEscolher){
     if(nome) nome.textContent = '✓ ' + arquivo.name;
     aoEscolher(arquivo);
   }
+}
+
+// Esvazia a caixa (sem arquivo) e trava ou destrava. texto = o que aparece no lugar do nome.
+function preparaCaixaEnvio(caixa, travada, texto){
+  const entrada = caixa.querySelector('input[type=file]');
+  entrada.value = '';
+  entrada.disabled = travada;
+  caixa.classList.toggle('travada', travada);
+  caixa.classList.remove('escolhido', 'recusado', 'arrastando');
+  caixa.querySelector('.caixa-envio-arquivo').textContent = texto;
+}
+
+// Marca o arquivo da caixa como recusado (vermelho), por exemplo de outra empresa.
+function recusaCaixaEnvio(caixa){
+  caixa.classList.remove('escolhido');
+  caixa.classList.add('recusado');
 }

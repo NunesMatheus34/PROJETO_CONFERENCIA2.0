@@ -17,6 +17,16 @@
 }
 .bloco + .bloco, .bloco + .mensagem, .mensagem + .bloco{margin-top:var(--esp-4)}
 
+/* ---------- Escolhas do topo (banco, empresa, unidade) ---------- */
+.escolhas{display:flex;flex-wrap:wrap;gap:var(--esp-4);margin-bottom:var(--esp-5)}
+.campo{display:flex;flex-direction:column;gap:var(--esp-1);min-width:220px}
+.campo-rotulo{font-size:13px;font-weight:600;color:var(--texto-fraco)}
+.campo select,.campo-busca{
+  font:inherit;font-size:14px;color:var(--texto);background:var(--superficie);
+  border:1px solid var(--borda-forte);border-radius:var(--raio);padding:8px 10px;
+}
+.campo select:disabled{background:var(--superficie-suave);color:var(--texto-fraco)}
+
 /* ---------- Caixas de envio de arquivo (clicar ou arrastar) ---------- */
 .envios{display:grid;grid-template-columns:repeat(auto-fit, minmax(260px, 1fr));gap:var(--esp-4)}
 .caixa-envio{
@@ -33,15 +43,28 @@
 .caixa-envio-dica{font-size:13px;color:var(--texto-fraco)}
 .caixa-envio-arquivo{margin-top:var(--esp-2);font-size:13px;font-weight:500;word-break:break-all}
 .caixa-envio.escolhido .caixa-envio-arquivo{color:var(--ok-texto)}
+/* travada: antes de escolher banco e empresa */
+.caixa-envio.travada{cursor:not-allowed;opacity:.5;border-color:var(--borda);background:var(--superficie-suave)}
+.caixa-envio.travada:hover{border-color:var(--borda);background:var(--superficie-suave)}
+/* recusada: o arquivo é de outra empresa, de outro banco ou não pôde ser lido */
+.caixa-envio.recusado{border-style:solid;border-color:var(--alerta-texto);background:var(--alerta-fundo)}
+.caixa-envio.recusado .caixa-envio-arquivo{color:var(--alerta-texto)}
+
+/* linha de informação acima do resultado (Itaú: consulta, unidades) */
+.info-resultado{margin:var(--esp-5) 0 var(--esp-3);font-size:13px;color:var(--texto-fraco)}
+#ddaResultado:not([hidden]){margin-top:var(--esp-5)}
 
 .acoes{display:flex;flex-wrap:wrap;gap:var(--esp-3);margin-top:var(--esp-4)}
 
 /* ---------- Cartões de resumo (quantidade e total de cada status) ---------- */
 .cartoes{display:grid;grid-template-columns:repeat(auto-fit, minmax(180px, 1fr));gap:var(--esp-3)}
 .cartao{
+  display:flex;flex-direction:column;align-items:flex-start;text-align:left;font:inherit;color:inherit;cursor:pointer;
   background:var(--superficie);border:1px solid var(--borda);border-top:4px solid var(--cor, var(--borda-forte));
   border-radius:var(--raio);padding:var(--esp-3) var(--esp-4);box-shadow:var(--sombra);
 }
+.cartao:hover{border-color:var(--cor, var(--borda-forte))}
+.cartao.ativo{background:var(--cor-fundo, var(--superficie));border-color:var(--cor, var(--borda-forte))}
 .cartao-nome{font-size:13px;font-weight:500;color:var(--texto-fraco)}
 .cartao-qtd{font-family:var(--fonte-numeros);font-size:24px;font-weight:600;color:var(--cor, var(--texto))}
 .cartao-total{font-family:var(--fonte-numeros);font-size:14px;color:var(--texto-fraco)}
@@ -51,6 +74,7 @@
 .st-aviso {--cor:var(--aviso-texto); --cor-fundo:var(--aviso-fundo)}
 .st-alerta{--cor:var(--alerta-texto);--cor-fundo:var(--alerta-fundo)}
 .st-neutro{--cor:var(--neutro-texto);--cor-fundo:var(--neutro-fundo)}
+.st-confirmar{--cor:var(--confirmar-texto);--cor-fundo:var(--confirmar-fundo)}
 
 /* ---------- Abas ---------- */
 .abas{display:flex;gap:var(--esp-1);border-bottom:1px solid var(--borda);overflow-x:auto;margin-top:var(--esp-5)}
@@ -63,8 +87,16 @@
 .aba[aria-selected="true"]{color:var(--cor, var(--destaque));border-bottom-color:var(--cor, var(--destaque))}
 .aba-qtd{font-family:var(--fonte-numeros);font-size:12px;margin-left:6px;padding:1px 6px;border-radius:10px;background:var(--cor-fundo, var(--neutro-fundo))}
 
+/* ---------- Busca (entre as abas e a tabela) ---------- */
+.barra-busca{background:var(--superficie);border:1px solid var(--borda);border-top:none;padding:var(--esp-3)}
+.campo-busca{width:100%;max-width:420px}
+
 /* ---------- Tabela de resultado ---------- */
 .tabela-caixa{overflow-x:auto;background:var(--superficie);border:1px solid var(--borda);border-top:none;border-radius:0 0 var(--raio) var(--raio)}
+.tabela .sub{display:block;font-size:12px;color:var(--texto-fraco);font-family:var(--fonte-texto)}
+.tabela .codigo{font-size:12px;word-break:break-all;min-width:200px}
+.tabela .sem-quebra{white-space:nowrap}
+.tabela .vazio{text-align:center;color:var(--texto-fraco);padding:var(--esp-5)}
 .tabela{width:100%;border-collapse:collapse;font-size:14px}
 .tabela th{
   text-align:left;font-size:12px;font-weight:600;letter-spacing:.03em;text-transform:uppercase;
@@ -83,7 +115,9 @@
 }
 
 /* ---------- Texto corrido (Ajuda, Perfil) ---------- */
-.texto p + p{margin-top:var(--esp-3)}
+.texto p + p, .texto h2 + p, .texto p + ul, .texto ul + p{margin-top:var(--esp-3)}
+.legenda{list-style:none;display:grid;gap:var(--esp-2)}
+.nota{font-size:13px;color:var(--texto-fraco)}
 
 /* ---------- Celular ---------- */
 @media (max-width:760px){

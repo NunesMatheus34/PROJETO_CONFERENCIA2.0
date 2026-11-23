@@ -47,6 +47,22 @@ function formatData(v){
   return String(v).trim();
 }
 
+// Data só para mostrar, sempre dd/mm/aaaa (aaaa-mm-dd e dd/mm/aa também viram dd/mm/aaaa).
+// Não muda o dado usado na conferência; só o que aparece na tela e na busca.
+function dataBR(v){
+  const s = formatData(v);
+  let m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if(m) return `${m[3]}/${m[2]}/${m[1]}`;
+  m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2}|\d{4})$/);
+  if(m) return `${m[1].padStart(2,'0')}/${m[2].padStart(2,'0')}/${m[3].length===2 ? '20'+m[3] : m[3]}`;
+  return s;
+}
+
+// Valor em centavos, como texto de dígitos (12,30 -> "1230"), para a busca por número.
+function centavos(v){
+  return (v===null || v===undefined || isNaN(v)) ? '' : String(Math.round(Math.abs(v)*100));
+}
+
 // Número como dinheiro brasileiro, só para mostrar: 1234.5 -> "R$ 1.234,50".
 // Sem valor vira "—", para não parecer que é zero.
 function brl(n){

@@ -26,6 +26,7 @@
   --aviso-fundo:#FCF1D6;   --aviso-texto:#7A4F00;
   --alerta-fundo:#FBE5E2;  --alerta-texto:#9A2A1C;
   --neutro-fundo:#EDF0EF;  --neutro-texto:#46544F;
+  --confirmar-fundo:#ECE7F8; --confirmar-texto:#4B3A8C;   /* roxo: confirmar com o fornecedor */
 
   /* fontes: texto em Plex Sans, números em Plex Mono (com reserva do sistema) */
   --fonte-texto:"IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
@@ -128,6 +129,10 @@ main{padding:var(--esp-6) var(--esp-5);max-width:1180px}
 .mensagem-ok    {background:var(--ok-fundo);    color:var(--ok-texto);    border-color:var(--ok-texto)}
 .mensagem-aviso {background:var(--aviso-fundo); color:var(--aviso-texto); border-color:var(--aviso-texto)}
 .mensagem-alerta{background:var(--alerta-fundo);color:var(--alerta-texto);border-color:var(--alerta-texto)}
+/* alerta grande: arquivo recusado (outra empresa, outro banco), a conferência não roda */
+.mensagem-grande{font-size:16px;font-weight:600;padding:var(--esp-4) var(--esp-5);border-width:2px;border-left-width:8px}
+.mensagem-grande p + p{margin-top:var(--esp-2)}
+.mensagem + .mensagem{margin-top:var(--esp-3)}
 
 /* ---------- Celular: menu vira gaveta por cima da tela ---------- */
 @media (max-width:760px){

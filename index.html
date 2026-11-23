@@ -3,7 +3,7 @@
      CONFERÊNCIA DDA 2.0 — página única
      Menu lateral à esquerda; cada tela é uma <section> que o menu mostra e
      esconde pelo #endereço (js/app.js). Planilhas são lidas só no navegador.
-     Etapa 2: só a base, sem nenhuma conferência ligada ainda.
+     Telas prontas: Conferência DDA (Santander e Itaú). As outras chegam nas próximas etapas.
      ===================================================================== -->
 <html lang="pt-BR">
 <head>
@@ -14,6 +14,11 @@
 <!-- SheetJS (leitura de Excel no navegador): versão fixa + integrity (SRI) -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"
         integrity="sha384-vtjasyidUo0kW94K5MXDXntzOJpQgBKXmE7e2Ga4LG0skTTLeBi97eFAXsqewJjw"
+        crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+
+<!-- ExcelJS (gerar o Excel de resultado no navegador): versão fixa + integrity (SRI) -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"
+        integrity="sha384-Pqp51FUN2/qzfxZxBCtF0stpc9ONI6MYZpVqmo8m20SoaQCzf+arZvACkLkirlPz"
         crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 
 <!-- Fonte IBM Plex (não existe no cdnjs; sem ela a página usa a fonte do sistema) -->
@@ -74,30 +79,63 @@
       <header class="tela-cabecalho">
         <p class="sobretitulo">DDA do banco × relatório do sistema</p>
         <h1 id="titulo-conferencia-dda">Conferência DDA</h1>
-        <p class="tela-descricao">Envie o DDA do banco e o relatório de títulos a pagar do sistema.</p>
+        <p class="tela-descricao">Escolha o banco e a empresa, envie o DDA do banco e o relatório de títulos a pagar do sistema.</p>
       </header>
       <div class="bloco">
+        <!-- 1º banco e empresa: sem os dois, as caixas de arquivo ficam travadas -->
+        <div class="escolhas">
+          <label class="campo">
+            <span class="campo-rotulo">Banco</span>
+            <select id="ddaBanco">
+              <option value="">Escolha o banco</option>
+              <option value="santander">Santander</option>
+              <option value="itau">Itaú</option>
+            </select>
+          </label>
+          <label class="campo">
+            <span class="campo-rotulo">Empresa</span>
+            <select id="ddaEmpresa" disabled>
+              <option value="">Escolha o banco primeiro</option>
+            </select>
+          </label>
+          <label class="campo" id="ddaCampoUnidade" hidden>
+            <span class="campo-rotulo">Unidade do pagador (Itaú)</span>
+            <select id="ddaUnidade">
+              <option value="todas">Todas</option>
+              <option value="sem-capinopolis">CRV Industrial (sem Capinópolis)</option>
+              <option value="capinopolis">Unidade Capinópolis</option>
+            </select>
+          </label>
+        </div>
         <div class="envios">
-          <label class="caixa-envio" id="ddaCaixaBanco">
-            <input type="file" class="caixa-envio-input" accept=".xlsx,.xls">
+          <label class="caixa-envio travada" id="ddaCaixaBanco">
+            <input type="file" class="caixa-envio-input" accept=".xlsx,.xls" disabled>
             <svg class="ico" aria-hidden="true"><use href="#i-arquivo"/></svg>
             <span class="caixa-envio-titulo">DDA do banco</span>
-            <span class="caixa-envio-dica">Excel do banco. Arraste o arquivo aqui ou clique para escolher.</span>
-            <span class="caixa-envio-arquivo">Nenhum arquivo escolhido</span>
+            <span class="caixa-envio-dica">Excel do DDA do banco escolhido. Arraste o arquivo aqui ou clique para escolher.</span>
+            <span class="caixa-envio-arquivo">Escolha o banco e a empresa primeiro</span>
           </label>
-          <label class="caixa-envio" id="ddaCaixaSistema">
-            <input type="file" class="caixa-envio-input" accept=".xlsx,.xls">
+          <label class="caixa-envio travada" id="ddaCaixaSistema">
+            <input type="file" class="caixa-envio-input" accept=".xlsx,.xls" disabled>
             <svg class="ico" aria-hidden="true"><use href="#i-arquivo"/></svg>
             <span class="caixa-envio-titulo">Relatório do sistema</span>
-            <span class="caixa-envio-dica">Excel de títulos a pagar. Arraste o arquivo aqui ou clique para escolher.</span>
-            <span class="caixa-envio-arquivo">Nenhum arquivo escolhido</span>
+            <span class="caixa-envio-dica">Excel de títulos a pagar da empresa escolhida. Arraste o arquivo aqui ou clique para escolher.</span>
+            <span class="caixa-envio-arquivo">Escolha o banco e a empresa primeiro</span>
           </label>
         </div>
         <div class="acoes">
-          <button type="button" class="botao botao-principal" disabled>Conferir</button>
+          <button type="button" class="botao botao-principal" id="ddaConferir" disabled>Conferir</button>
+          <button type="button" class="botao" id="ddaBaixar" disabled>Baixar Excel</button>
+          <button type="button" class="botao" id="ddaNova">Nova conferência</button>
         </div>
       </div>
-      <p class="mensagem mensagem-aviso">! A conferência desta tela ainda não foi ligada (próxima etapa).</p>
+      <!-- alerta grande: arquivo de outra empresa, de outro banco ou ilegível (não confere) -->
+      <div class="mensagem mensagem-alerta mensagem-grande" id="ddaAlerta" role="alert" hidden></div>
+      <div class="mensagem mensagem-aviso" id="ddaAviso" role="status" hidden></div>
+      <div id="ddaResultado" hidden>
+        <p class="info-resultado mono" id="ddaInfo"></p>
+        <div id="ddaArea"></div>
+      </div>
     </section>
 
     <!-- ===================== CÓDIGO DE BARRAS ===================== -->
@@ -138,7 +176,18 @@
       </header>
       <div class="bloco texto">
         <p>Os arquivos são lidos só neste navegador: nenhuma planilha, PDF ou boleto é enviado para servidor.</p>
-        <p>O passo a passo de cada tela e o significado de cada status entram aqui junto com as conferências.</p>
+      </div>
+      <div class="bloco texto">
+        <h2>Conferência DDA (Santander e Itaú)</h2>
+        <p>1. Escolha o banco e a empresa. 2. Envie o DDA do banco e o relatório de títulos a pagar do sistema.
+           Se o relatório for de outra empresa, ou o DDA for de outro banco ou de outra conta, aparece um alerta e a conferência não é feita.
+           3. Clique em Conferir. Cada boleto procura um título do sistema pelo valor (diferença de até 1 centavo),
+           primeiro com nome e vencimento iguais, depois só com o nome, depois só com o valor.</p>
+        <p>No Itaú dá para conferir só uma unidade do pagador (CRV Industrial sem Capinópolis, ou Unidade Capinópolis); o padrão é Todas.</p>
+        <!-- legenda montada pelo js/telas/conferencia-dda.js a partir de STATUS_DDA (mesmo nome e cor da tela e do Excel) -->
+        <ul class="legenda" id="ajudaStatusDda"></ul>
+        <p class="nota">No Excel, Conferidos, Datas divergentes e Nome divergente trazem o saldo do sistema; na tela, o valor do boleto.
+           Por isso um total pode diferir em 1 centavo entre os dois.</p>
       </div>
     </section>
 
@@ -154,13 +203,20 @@
   </main>
 </div>
 
-<!-- ordem: formatos → leitura → empresas → boleto → app (menu e telas) -->
+<!-- ordem: formatos → leitura → empresas → bancos → boleto → regras → excel → telas → app (menu) -->
 <script src="js/leitura/formatos.js"></script>
 <script src="js/leitura/planilha.js"></script>
 <script src="js/leitura/caixa-envio.js"></script>
 <script src="js/leitura/mensagens.js"></script>
 <script src="js/empresas.js"></script>
+<script src="js/bancos/itau.js"></script>
+<script src="js/bancos/santander.js"></script>
+<script src="js/bancos/detecta.js"></script>
 <script src="js/boleto.js"></script>
+<script src="js/conferencias/dda.js"></script>
+<script src="js/excel.js"></script>
+<script src="js/telas/resultado.js"></script>
+<script src="js/telas/conferencia-dda.js"></script>
 <script src="js/app.js"></script>
 </body>
 </html>
