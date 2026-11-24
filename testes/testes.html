@@ -21,7 +21,11 @@
      Relatório contra relatório (vencimento diferente casa, valor diferente
      não casa, mesmo código nas duas empresas fica vermelho, a mesma linha
      nos dois relatórios sai da conferência e vai para a aba própria) e o
-     alerta de relatório consolidado da Rubi ("Empresa(s): 1 / 4 /").
+     alerta de relatório consolidado da Rubi ("Empresa(s): 1 / 4 /") e a
+     Conferência de boletos (os testes do projeto antigo: agrupado, agrupado
+     grande, só valor, NF de 2 dígitos, cedido, não fecha, NF com 1 dígito
+     diferente, código do sistema, folha, 2 vencimentos, Excel lido de volta;
+     e, novos, a empresa pelo seletor com as travas e a tela).
      ===================================================================== -->
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Testes da Conferência</title>
@@ -84,10 +88,13 @@
 <script src="../js/conferencias/nomes.js"></script>
 <script src="../js/conferencias/codigo-barras.js"></script>
 <script src="../js/conferencias/relatorio-contra-relatorio.js"></script>
+<script src="../js/conferencias/boletos.js"></script>
 <script src="../js/excel.js"></script>
 <script src="../js/telas/resultado.js"></script>
 <!-- só para as colunas da tabela (o destaque vermelho); a tela não é ligada aqui -->
 <script src="../js/telas/codigo-barras.js"></script>
+<!-- só para desenhar linhas da tabela (textContent e Copiar); a tela não é ligada aqui -->
+<script src="../js/telas/boletos.js"></script>
 
 <script>
 /* ---------------------------------------------------------------------
@@ -828,6 +835,269 @@ async function rodaTestes(){
     confere('Aba "Mesma linha": a lista com 2 linhas e rodapé sem soma', area.querySelectorAll('tbody tr').length === 2 && rodape.children.length === 1 && !/R\$/.test(rodape.textContent), rodape.textContent);
     const aba = abasExcelRelatorios(r, EA, EB).find(a => a.nome === 'Mesma linha nos dois relatórios');
     confere('Excel: aba "Mesma linha nos dois relatórios" com as mesmas 2 linhas', aba && aba.linhas.length === 2, aba ? String(aba.linhas.length) : 'sem aba');
+  });
+
+  // ---------- Conferência de boletos (testes do projeto antigo, só dados fictícios) ----------
+  // boleto fictício com código válido (DV geral calculado pelo js/boleto.js)
+  const codigoFicticio = (banco, venc, valor, n) => {
+    const [d, m, a] = venc.split('/').map(Number);
+    const fator = 1000 + Math.round((Date.UTC(a, m - 1, d) - Date.UTC(2025, 1, 22)) / 86400000);
+    const livre = String(1000000000 + n).padStart(25, '0');
+    const sem = banco + '9' + String(fator).padStart(4, '0') + String(Math.round(valor * 100)).padStart(10, '0') + livre;
+    return sem.slice(0, 4) + dvMod11Geral(sem.slice(0, 4) + '0' + sem.slice(4)) + sem.slice(4);
+  };
+  // boleto e título no formato que o leitorItau e o leitorSistemaBoletos devolvem
+  let nBoleto = 0, nTitulo = 0;
+  const boletoFicticio = ({ beneficiario, doc, valor, venc = '20/11/2026', banco = '341', valorAPagar }) => {
+    const cod = codigoFicticio(banco, venc, valor, ++nBoleto);
+    return { venc, beneficiario, cnpj:'00.000.000/0001-00', doc, valor, valorAPagar: valorAPagar !== undefined ? valorAPagar : valor,
+             codigoBarras: cod, pagador:'EMPRESA FICTICIA LTDA', banco, comDesconto: valorAPagar !== undefined && valorAPagar !== valor,
+             codigoTexto: cod, codigoSuspeito:false, linhaExcel: 11 + nBoleto };
+  };
+  const tituloFicticio = ({ nome, doc, valor, fornecedor = '9001', venc = '20/11/2026' }) =>
+    ({ venc, fornecedor, nome, doc, prf:'1', valor, codigoTexto:'', codigoSuspeito:false, temCodigo:false, linhaExcel: 5 + (++nTitulo) });
+  const grupoDe = (linhas, nome) => linhas.filter(l => ((l.titulo && l.titulo.nome) || (l.boleto && l.boleto.beneficiario)) === nome);
+
+  await teste('Boletos: código gravado como número no DDA', async () => {
+    // o mesmo código do teste "Boleto: código válido", gravado como NÚMERO num Excel fictício do DDA do Itaú
+    const linhas = [
+      ['Data/Hora: 21/10/2026 às 09:00:00'],
+      ['Pagador/Agregado', 'Beneficiário', 'CPF/CNPJ', 'Venc.', 'Nº Doc.', 'Até Venc.', 'A Pagar', 'Tipo de Boleto', 'Banco', 'Observações', 'Código de barras'],
+      ['EMPRESA FICTICIA LTDA', 'ETA FICTICIA FORNECEDOR', '00.000.000/0001-00', '23/10/2026', '9901', 1234.56, 1234.56, 'Normal', '341', '', CB],
+    ];
+    const leitura = await lerMatrizComTexto(excelFicticio(linhas, { K3: { t:'n', v:Number(CB) } }));
+    const [b] = leitorItau(leitura);
+    const v = validaBoletoDda(b);
+    confere('Código gravado como número no Excel do DDA → bloqueado como "ilegível"', b.codigoSuspeito && !v.ok && v.linha === '' && /ilegível/.test(v.motivo), v.motivo);
+  });
+
+  await teste('Boletos: agrupado', () => {
+    const dda = [boletoFicticio({ beneficiario:'ALFA FICTICIA GRUPO', doc:'FAT 1', valor:600.60 })];
+    const tits = [100.10, 200.20, 300.30].map((v, i) => tituloFicticio({ nome:'ALFA FICTICIA GRUPO', doc:String(9001 + i), valor:v, fornecedor:'7001' }));
+    const linhas = conferirBoletos(dda, tits);
+    const grupo = linhas.filter(l => l.agrupado);
+    const abas = montaAbasBol(linhas);
+    const cab = abas.verif.find(r => r.status === 'grupo');
+    confere('3 títulos (R$ 100,10 + R$ 200,20 + R$ 300,30) e um boleto de R$ 600,60 → 1 grupo com as 3 NFs',
+      grupo.length === 3 && new Set(grupo.map(l => l.agrupado.idx)).size === 1 &&
+      grupo.map(l => l.titulo.doc).sort().join(',') === '9001,9002,9003' && cab && cab.nf === '3 NFs',
+      `${grupo.length} NFs no grupo (${grupo.map(l => l.titulo.doc).join(', ')}) · ${cab ? cab.verificar : 'sem linha do boleto'}`);
+  });
+
+  await teste('Boletos: só valor igual', () => {
+    const dda = [boletoFicticio({ beneficiario:'BETA PAPEIS LTDA', doc:'9011', valor:450.00 })];
+    const tits = [tituloFicticio({ nome:'GAMA VIDROS LTDA', doc:'9012', valor:450.00 })];
+    const linhas = conferirBoletos(dda, tits);
+    const t = grupoDe(linhas, 'GAMA VIDROS LTDA')[0], b = grupoDe(linhas, 'BETA PAPEIS LTDA')[0];
+    confere('Só o valor igual (nome e NF diferentes) → NÃO casa', t && t.grupo === 'bolSem' && !t.boleto && b && b.grupo === 'bolDda',
+      `título: ${t && t.grupo} · boleto: ${b && b.grupo}`);
+  });
+
+  await teste('Boletos: NF de 2 dígitos', () => {
+    const b = { ...boletoFicticio({ beneficiario:'DELTA FICTICIA ACOS', doc:'1046/A', valor:800.00 }), palavras: palavrasDoNome('DELTA FICTICIA ACOS') };
+    const t = { ...tituloFicticio({ nome:'DELTA FICTICIA ACOS', doc:'46', valor:790.00 }), palavras: palavrasDoNome('DELTA FICTICIA ACOS'), nf: nfSinal('46') };
+    const s = sinaisPar(t, b);
+    confere('NF "46" dentro do Nº Doc. "1046/A" → não conta como sinal de NF', nfSinal('46') === '' && !s.nf && s.n === 1,
+      `nfSinal("46") = "${nfSinal('46')}" · sinais: nome ${s.nome}, NF ${s.nf}, valor ${s.valor}`);
+    const linhas = conferirBoletos([boletoFicticio({ beneficiario:'DELTA FICTICIA ACOS', doc:'1046/A', valor:800.00 })],
+                                   [tituloFicticio({ nome:'DELTA FICTICIA ACOS', doc:'46', valor:790.00 })]);
+    const tl = linhas.find(l => l.titulo);
+    confere('… e por isso o par (só nome) não casa', tl && tl.grupo === 'bolSem', `título: ${tl && tl.grupo}`);
+  });
+
+  await teste('Boletos: título cedido', () => {
+    const dda = [boletoFicticio({ beneficiario:'PSI FUNDO DE INVESTIMENTO', doc:'NF9021', valor:1500.00 })];
+    const tits = [tituloFicticio({ nome:'EPSILON FICTICIA TINTAS', doc:'9021', valor:1500.00 })];
+    const linhas = conferirBoletos(dda, tits);
+    const l = linhas.find(x => x.titulo);
+    const abas = montaAbasBol(linhas);
+    const r = abas.verif.find(x => x.fornecedor === 'EPSILON FICTICIA TINTAS');
+    confere('Beneficiário "PSI FUNDO DE INVESTIMENTO" com valor e NF iguais → Verificação, "título cedido"',
+      l && l.grupo === 'bolVerif' && /título cedido/.test(l.motivo) && r && r.status === 'verif',
+      l ? `${l.grupo} · ${l.motivo}` : 'sem linha');
+  });
+
+  await teste('Boletos: Excel confere com a tela', async () => {
+    const dda = [boletoFicticio({ beneficiario:'ZETA FICTICIA CABOS', doc:'9031', valor:321.00 })];
+    const tits = [tituloFicticio({ nome:'ZETA FICTICIA CABOS', doc:'9031', valor:321.00 })];
+    const abas = montaAbasBol(conferirBoletos(dda, tits));
+    const buf = await planilhaBoletos(abas).xlsx.writeBuffer();
+    const erros = await confereExcelBoletos(buf, abas);
+    confere('Excel gerado e lido de volta → linha digitável igual à da tela', erros.length === 0 && abas.ok.length === 1, erros.join(' · ') || abas.ok[0].linha);
+    // se o arquivo não bater com a tela (aqui: a tela com 1 dígito trocado), a conferência acusa
+    const mexida = { ...abas, ok: abas.ok.map(r => ({ ...r, linha: r.linha.slice(0, 46) + ((Number(r.linha[46]) + 1) % 10) })) };
+    const errosMexida = await confereExcelBoletos(buf, mexida);
+    confere('Excel com linha digitável diferente da tela → acusa a diferença', errosMexida.length === 1 && /linha digitável/.test(errosMexida[0]), errosMexida[0] || 'não acusou');
+    const y = await excelBoletosConferido(abas);
+    confere('Excel igual à tela → libera o arquivo para baixar', y.conteudo && !y.erros, y.erros ? y.erros[0] : 'liberou');
+  });
+
+  await teste('Boletos: NF no começo do Nº Doc.', () => {
+    confere('NF 9041 com Nº Doc. "09041-1" → conta como sinal de NF', nfNoDoc('9041', '09041-1'), 'começa com 9041');
+    confere('NF 9041 com Nº Doc. "1/9041" → NÃO conta (a NF tem que estar no começo)', !nfNoDoc('9041', '1/9041'), 'não começa com 9041');
+  });
+
+  await teste('Boletos: agrupado grande', () => {
+    // 25 títulos terminam em ,01 (centavos ≡ 1 mod 1000) e 15 terminam em ,00 de outra dezena
+    // (≡ 500 mod 1000): só a combinação das 25 dá a soma, então ela é única
+    const escolhidos = [], outros = [];
+    for(let i = 0; i < 25; i++) escolhidos.push(tituloFicticio({ nome:'OMEGA FICTICIA COMBUSTIVEIS', doc:String(9101 + i), valor:(1000 * (5 + i) + 1) / 100, fornecedor:'7101' }));
+    for(let j = 0; j < 15; j++) outros.push(tituloFicticio({ nome:'OMEGA FICTICIA COMBUSTIVEIS', doc:String(9201 + j), valor:(1000 * (7 + 2 * j) + 500) / 100, fornecedor:'7101' }));
+    const tits = [];
+    for(let k = 0; k < 40; k++) tits.push(k % 8 < 5 ? escolhidos.shift() || outros.shift() : outros.shift() || escolhidos.shift());
+    const alvo = tits.filter(t => Number(t.doc) < 9200).reduce((s, t) => s + Math.round(t.valor * 100), 0) / 100;
+    const linhas = conferirBoletos([boletoFicticio({ beneficiario:'OMEGA FICTICIA COMBUSTIVEIS', doc:'FAT 2', valor:alvo })], tits);
+    const grupo = linhas.filter(l => l.agrupado);
+    const certos = grupo.every(l => Number(l.titulo.doc) < 9200);
+    confere('40 títulos e um boleto igual à soma de 25 deles → acha os 25', grupo.length === 25 && certos,
+      `${grupo.length} NFs no grupo · boleto ${brl(alvo)}`);
+  });
+
+  await teste('Boletos: boleto que não fecha', () => {
+    const tits = [9301, 9302, 9303].map(d => tituloFicticio({ nome:'LAMBDA FICTICIA MOVEIS', doc:String(d), valor:300.00, fornecedor:'7201' }));
+    const linhas = conferirBoletos([boletoFicticio({ beneficiario:'LAMBDA FICTICIA MOVEIS', doc:'FAT 3', valor:950.00 })], tits);
+    const b = linhas.find(l => l.naoFecha);
+    const sem = linhas.filter(l => l.grupo === 'bolSem');
+    confere('3 títulos somando R$ 900,00 e um boleto de R$ 950,00 → aviso com diferença de R$ 50,00, NFs continuam em "Sem boleto"',
+      b && b.grupo === 'bolVerif' && /não fecha com as 3 NFs/.test(b.motivo) && /diferença R\$\s?50,00/.test(b.motivo) && sem.length === 3,
+      b ? b.motivo : 'sem aviso');
+  });
+
+  await teste('Boletos: NF com um dígito diferente', () => {
+    const linhas = conferirBoletos([boletoFicticio({ beneficiario:'MU FICTICIA REFRIGERACAO', doc:'9411', valor:512.00 })],
+                                   [tituloFicticio({ nome:'MU FICTICIA REFRIGERACAO', doc:'9421', valor:512.00 })]);
+    const l = linhas.find(x => x.titulo);
+    confere('NF 9421 com Nº Doc. "9411" (nome e valor iguais) → Verificação, "um dígito diferente"',
+      l && l.grupo === 'bolVerif' && /O boleto é da NF 9411 e no sistema está NF 9421/.test(l.motivo), l ? l.motivo : 'sem linha');
+  });
+
+  await teste('Boletos: cedido a instituição de pagamentos', () => {
+    const linhas = conferirBoletos([boletoFicticio({ beneficiario:'OMEGA PAGAMENTOS SA', doc:'9501', valor:610.00 })],
+                                   [tituloFicticio({ nome:'KAPPA FICTICIA BORRACHAS', doc:'9501', valor:610.00 })]);
+    const l = linhas.find(x => x.titulo);
+    confere('Beneficiário com PAGAMENTOS → "título cedido a factoring/fundo"', l && /título cedido/.test(l.motivo), l ? l.motivo : 'sem linha');
+  });
+
+  await teste('Boletos: código já lançado no sistema', () => {
+    const comCodigo = (t, cod) => ({ ...t, codigoTexto: cod, temCodigo: true });
+    // a) DV inválido + boleto válido no DDA com mesmo valor e NF no Nº Doc.
+    const bA = boletoFicticio({ beneficiario:'NU FICTICIA FERRO', doc:'9601', valor:700.00 });
+    const valido = codigoFicticio('341', '20/11/2026', 700.00, 901);
+    const invalido = valido.slice(0, 30) + ((Number(valido[30]) + 1) % 10) + valido.slice(31);
+    const tA = comCodigo(tituloFicticio({ nome:'NU FICTICIA FERRO', doc:'9601', valor:700.00 }), invalido);
+    const linhasA = conferirBoletos([bA], [tA]);
+    const lA = linhasA.find(l => l.titulo);
+    const abasA = montaAbasBol(linhasA);
+    const rA = abasA.verif[abasA.verif.length - 1];
+    confere('Código do sistema com DV inválido e boleto válido no DDA → bloco vermelho, sugerindo o código do DDA',
+      lA && lA.grupo === 'bolCodSis' && lA.motivo.startsWith(MSG_COD_SIS.invalidoComDda) && lA.linha === barrasParaLinha(bA.codigoTexto) &&
+      rA && rA.status === 'codsis', lA ? lA.motivo : 'sem linha');
+    confere('… e o código do sistema não é corrigido', tA.codigoTexto === invalido && lA.titulo.codigoTexto === invalido, lA.titulo.codigoTexto);
+    // b) código válido de outro banco
+    const bB = boletoFicticio({ beneficiario:'XI FICTICIA ACOS', doc:'9602', valor:820.00, banco:'001' });
+    const tB = comCodigo(tituloFicticio({ nome:'XI FICTICIA ACOS', doc:'9602', valor:820.00 }), codigoFicticio('033', '20/11/2026', 820.00, 902));
+    const lB = conferirBoletos([bB], [tB]).find(l => l.titulo);
+    confere('Código válido de outro banco → "Boleto trocado"', lB && lB.motivo.startsWith(MSG_COD_SIS.trocado), lB ? lB.motivo : 'sem linha');
+    // c) mesmo banco, outro número
+    const bC = boletoFicticio({ beneficiario:'SIGMA FICTICIA LONAS', doc:'9603', valor:330.00 });
+    const tC = comCodigo(tituloFicticio({ nome:'SIGMA FICTICIA LONAS', doc:'9603', valor:330.00 }), codigoFicticio('341', '20/11/2026', 330.00, 903));
+    const lC = conferirBoletos([bC], [tC]).find(l => l.titulo);
+    confere('Código válido do mesmo banco, outro número → "Código do sistema diferente do boleto do DDA"', lC && lC.motivo.startsWith(MSG_COD_SIS.diferente), lC ? lC.motivo : 'sem linha');
+    // d) nenhum boleto no DDA
+    const tD = comCodigo(tituloFicticio({ nome:'TAU FICTICIA MOLAS', doc:'9604', valor:90.00 }), codigoFicticio('341', '20/11/2026', 90.00, 904));
+    const lD = conferirBoletos([boletoFicticio({ beneficiario:'OMEGA OUTRA FICTICIA', doc:'9999', valor:12.34 })], [tD]).find(l => l.titulo);
+    confere('Código válido sem boleto no DDA → "Código válido, mas não aparece no DDA"', lD && lD.motivo.startsWith(MSG_COD_SIS.foraDoDda) && !lD.boleto, lD ? lD.motivo : 'sem linha');
+    // e) código igual ao do DDA → fora da conferência, boleto usado
+    const bE = boletoFicticio({ beneficiario:'PHI FICTICIA PNEUS', doc:'9605', valor:150.00 });
+    const linhasE = conferirBoletos([bE], [comCodigo(tituloFicticio({ nome:'PHI FICTICIA PNEUS', doc:'9605', valor:150.00 }), bE.codigoTexto)]);
+    const abasE = montaAbasBol(linhasE);
+    confere('Código do sistema igual ao do DDA → OK, fora das abas e o boleto não sobra no DDA',
+      linhasE.length === 1 && linhasE[0].grupo === 'bolJa' && abasE.dda.length === 0 && abasE.ok.length === 0 && abasE.jaConferidos === 1,
+      `${linhasE.map(l => l.grupo).join(', ')} · já conferidos: ${abasE.jaConferidos}`);
+  });
+
+  await teste('Boletos: folha e impostos', () => {
+    const tits = [1, 2, 3].map(i => tituloFicticio({ nome:'EMPRESTIMO CONSIGNADO FOLHA', doc:String(9700 + i), valor:100.00 * i, fornecedor:'9901' }));
+    tits.push(tituloFicticio({ nome:'OMICRON FICTICIA CAIXAS', doc:'9711', valor:55.00 }));
+    const linhas = conferirBoletos([boletoFicticio({ beneficiario:'OMEGA OUTRA FICTICIA', doc:'9999', valor:12.34 })], tits);
+    const abas = montaAbasBol(linhas);
+    const folha = abas.sem.filter(r => r.status === 'folha');
+    const umPorUm = abas.sem.filter(r => r.status === 'sem' && /CONSIGNADO/.test(r.fornecedor));
+    confere('"EMPRESTIMO CONSIGNADO FOLHA" → bloco "Folha e impostos", uma linha por tipo, não aparece um por um',
+      folha.length === 1 && folha[0].qtd === 3 && folha[0].valor === 600 && umPorUm.length === 0 &&
+      abas.sem.some(r => r.status === 'faixa' && /Folha e impostos/.test(r.fornecedor)),
+      folha.length ? `${folha[0].fornecedor} · ${folha[0].nf} · ${brl(folha[0].valor)}` : 'sem bloco');
+    confere('… e o total da aba conta os 4 títulos', resumoAba(abas.sem).qtd === 4 && resumoAba(abas.sem).total === 655, `${resumoAba(abas.sem).qtd} itens · ${brl(resumoAba(abas.sem).total)}`);
+  });
+
+  await teste('Boletos: período com 2 vencimentos', async () => {
+    const dda = [boletoFicticio({ beneficiario:'PI FICTICIA VIDROS', doc:'9801', valor:100.00, venc:'14/11/2026' }),
+                 boletoFicticio({ beneficiario:'RHO FICTICIA TELAS', doc:'9802', valor:200.00, venc:'16/11/2026' }),
+                 boletoFicticio({ beneficiario:'CHI FICTICIA ROLOS', doc:'9803', valor:250.00, venc:'16/11/2026' })];
+    const tits = [tituloFicticio({ nome:'PI FICTICIA VIDROS', doc:'9801', valor:100.00, venc:'14/11/2026' }),
+                  tituloFicticio({ nome:'RHO FICTICIA TELAS', doc:'9802', valor:200.00, venc:'16/11/2026' }),
+                  tituloFicticio({ nome:'CHI FICTICIA ROLOS', doc:'9803', valor:250.00, venc:'16/11/2026' })];
+    const abas = montaAbasBol(conferirBoletos(dda, tits), { porData:true });
+    const faixas = abas.ok.filter(r => r.status === 'faixa').map(r => r.fornecedor);
+    const subt = abas.ok.filter(r => r.status === 'subtotal').map(r => r.valor);
+    confere('2 vencimentos → uma faixa por data, com subtotal de cada data e total geral',
+      faixas.length === 2 && /14\/11\/2026 \(sábado\)/.test(faixas[0]) && /16\/11\/2026 \(segunda\)/.test(faixas[1]) &&
+      subt.join('|') === '100|450' && resumoAba(abas.ok).total === 550, `${faixas.join(' · ')} · subtotais ${subt.map(brl).join(', ')}`);
+    const buf = await planilhaBoletos(abas).xlsx.writeBuffer();
+    const erros = await confereExcelBoletos(buf, abas);
+    confere('… e o Excel com as faixas confere com a tela', erros.length === 0, erros.join(' · ') || 'ok');
+  });
+
+  // ---------- Conferência de boletos: empresa pelo seletor e travas (novo nesta versão) ----------
+  // DDA do Itaú fictício (conta da empresa dada) e relatório "Duplicatas em Aberto Modelo A" fictício
+  const COD_ALFA = codigoFicticio('341', '20/11/2026', 100.00, 950);
+  const ddaItauBol = empresa => [
+    ['Nome da empresa: EMPRESA FICTICIA'], ['CPF/CNPJ: ' + empresa.cnpj], ['Data/Hora: 20/11/2026 às 09:00:00'],
+    ['Pagador/Agregado', 'Beneficiário', 'CPF/CNPJ', 'Venc.', 'Nº Doc.', 'Até Venc.', 'A Pagar', 'Tipo de Boleto', 'Banco', 'Observações', 'Código de barras'],
+    ['EMPRESA FICTICIA', 'ALFA FICTICIA PECAS LTDA', '00.000.000/0001-00', '20/11/2026', '9001', 100, 100, 'DM', '341', '', COD_ALFA],
+  ];
+  const relatorioBol = primeiraLinha => [
+    [primeiraLinha], ['Período: 20/11/2026 a 20/11/2026'],
+    ['Vencto.', 'Cliente', 'Nome', 'Duplicata', 'Prf', 'Código de barras', 'Saldo'],
+    ['20/11/2026', '7001', 'ALFA FICTICIA PECAS', '9001', '1', '', 100],
+    ['Total', '', '', '', '', '', 100],
+  ];
+  const LINHA_CRV_MATRIZ = '1 CRV INDUSTRIAL LTDA      Empresa(s): 1 / 5 /   Data/Hora : 20/11/26 08:00:00';
+  const LINHA_CRV_FILIAL_BOL = '5 CRV INDUSTRIAL LTDA      Empresa(s): 1 / 5 /   Data/Hora : 20/11/26 08:00:00';
+
+  await teste('Boletos: empresa e travas', async () => {
+    confere('Seletor só com as empresas que têm Itaú: CRV Matriz e CRV Filial',
+      empresasBoletos().map(e => e.id).join(',') === 'crv-matriz,crv-filial', empresasBoletos().map(e => e.nome).join(' · '));
+    const rel = checaArquivosBoletos(crvFilial, ddaItauBol(crvFilial), relatorioBol(LINHA_CRV_MATRIZ));
+    confere('Relatório da CRV Matriz com CRV Filial escolhida → bloqueado (no relatório)', /é da CRV Matriz/.test(rel.bloqueio) && rel.onde === 'sistema', rel.bloqueio);
+    const conta = checaArquivosBoletos(crvMatriz, ddaItauBol(crvFilial), relatorioBol(LINHA_CRV_MATRIZ));
+    confere('DDA da conta da CRV Filial com CRV Matriz escolhida → bloqueado (no DDA)', /conta da CRV Filial/.test(conta.bloqueio) && conta.onde === 'dda', conta.bloqueio);
+    const santander = checaArquivosBoletos(crvFilial, ddaSantanderFicticio(crvFilial, BOLETOS), relatorioBol(LINHA_CRV_FILIAL_BOL));
+    confere('DDA do Santander → bloqueado', /DDA do Santander/.test(santander.bloqueio), santander.bloqueio);
+    const certo = checaArquivosBoletos(crvFilial, ddaItauBol(crvFilial), relatorioBol(LINHA_CRV_FILIAL_BOL));
+    confere('Empresa, banco e conta certos → liberado', !certo.bloqueio && !certo.aviso, 'sem alerta');
+
+    const lDda = await lerMatrizComTexto(excelFicticio(ddaItauBol(crvFilial)));
+    const r = conferenciaBoletos(crvFilial, lDda, await lerMatrizComTexto(excelFicticio(relatorioBol(LINHA_CRV_FILIAL_BOL))));
+    const checagens = (r.checagens || []).map(c => `${c.tipo}: ${c.titulo}`);
+    confere('Arquivos fictícios certos → 1 título "Com boleto", com a linha digitável do DDA',
+      !r.erro && r.abas.ok.length === 1 && r.abas.ok[0].linha === barrasParaLinha(COD_ALFA) && r.nTitulos === 1 && r.nDda === 1, r.erro || r.abas.ok.map(x => x.fornecedor).join(', '));
+    confere('… e as checagens: mesma data, período e mesma empresa',
+      checagens.join(' | ') === 'ok: Mesma data | ok: Período do relatório: 20/11/2026 | ok: Mesma empresa', checagens.join(' | '));
+    const errado = conferenciaBoletos(crvMatriz, lDda, await lerMatrizComTexto(excelFicticio(relatorioBol(LINHA_CRV_FILIAL_BOL))));
+    confere('Mesmos arquivos com CRV Matriz escolhida → não confere', errado.erro && !errado.abas, errado.erro);
+  });
+
+  await teste('Boletos: tela', () => {
+    const r = linhaAbaBol('ok', { t: tituloFicticio({ nome:'<img src=x onerror=alert(1)>', doc:'1', valor:1 }), valor:1, bloco:1 });
+    const tr = linhaAbaTr(r, 'ok', colunasAbaBol('ok'));
+    confere('Nome com HTML aparece como texto (textContent), sem criar elemento', !tr.querySelector('img') && tr.textContent.includes('<img'), tr.textContent.slice(0, 60));
+    const linha = barrasParaLinha(COD_ALFA);
+    const comLinha = linhaAbaTr(linhaAbaBol('ok', { t: tituloFicticio({ nome:'ALFA FICTICIA', doc:'1', valor:100 }), linha, valor:100, bloco:2 }), 'ok', colunasAbaBol('ok'));
+    const botao = comLinha.querySelector('.botao-copiar');
+    confere('Linha digitável com banco, valor e vencimento lidos do código e o botão Copiar',
+      botao && botao.dataset.linha === linha && /Banco 341 · R\$\s?100,00 · venc\. 20\/11\/2026/.test(comLinha.textContent) && !comLinha.querySelector('input'),
+      comLinha.querySelector('.cod-bol').textContent);
   });
 
   mostraResultados();

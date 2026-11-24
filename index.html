@@ -4,7 +4,8 @@
      Menu lateral à esquerda, montado pela lista MENU do js/app.js; cada tela
      é uma <section> que o menu mostra e esconde pelo #endereço.
      Planilhas são lidas só no navegador.
-     Telas prontas: Conferência DDA (Santander, Itaú e Bradesco) e Código de barras. As outras chegam nas próximas etapas.
+     Telas prontas: Conferência DDA (Santander, Itaú e Bradesco), Código de barras e Conferência de boletos.
+     As outras chegam nas próximas etapas.
      ===================================================================== -->
 <html lang="pt-BR">
 <head>
@@ -283,9 +284,48 @@
       <header class="tela-cabecalho">
         <p class="sobretitulo">DDA × títulos com linha digitável</p>
         <h1 id="titulo-conferencia-boletos">Conferência de boletos</h1>
-        <p class="tela-descricao">Pareia cada título com o boleto do DDA e só libera a linha digitável conferida.</p>
+        <p class="tela-descricao">Pareia cada título do sistema com o boleto do DDA do Itaú e só libera a linha digitável conferida.</p>
       </header>
-      <p class="mensagem mensagem-aviso">! Esta tela chega numa próxima etapa.</p>
+      <div class="bloco">
+        <!-- 1º a empresa (só as que têm Itaú): sem ela, as caixas de arquivo ficam travadas -->
+        <div class="escolhas">
+          <label class="campo">
+            <span class="campo-rotulo">Empresa</span>
+            <select id="bolEmpresa"></select>
+          </label>
+        </div>
+        <div class="envios">
+          <label class="caixa-envio travada" id="bolCaixaDda">
+            <input type="file" class="caixa-envio-input" accept=".xlsx,.xls" disabled>
+            <svg class="ico" aria-hidden="true"><use href="#i-arquivo"/></svg>
+            <span class="caixa-envio-titulo">DDA do Itaú</span>
+            <span class="caixa-envio-dica">Excel "Consulta Boletos Recebidos" do internet banking. Arraste o arquivo aqui ou clique para escolher.</span>
+            <span class="caixa-envio-arquivo">Escolha a empresa primeiro</span>
+          </label>
+          <label class="caixa-envio travada" id="bolCaixaSistema">
+            <input type="file" class="caixa-envio-input" accept=".xlsx,.xls" disabled>
+            <svg class="ico" aria-hidden="true"><use href="#i-arquivo"/></svg>
+            <span class="caixa-envio-titulo">Relatório do sistema</span>
+            <span class="caixa-envio-dica">Excel "Duplicatas em Aberto Modelo A" (com a coluna Código de barras), da mesma empresa e do mesmo dia.</span>
+            <span class="caixa-envio-arquivo">Escolha a empresa primeiro</span>
+          </label>
+        </div>
+        <div class="acoes">
+          <button type="button" class="botao botao-principal" id="bolConferir" disabled>Conferir</button>
+          <button type="button" class="botao" id="bolBaixar" disabled>Baixar Excel</button>
+          <button type="button" class="botao" id="bolNova">Nova conferência</button>
+        </div>
+      </div>
+      <!-- alerta grande: arquivo de outra empresa, de outro banco ou ilegível (não confere) -->
+      <div class="mensagem mensagem-alerta mensagem-grande" id="bolAlerta" role="alert" hidden></div>
+      <div class="mensagem mensagem-aviso" id="bolAviso" role="status" hidden></div>
+      <!-- checagens dos arquivos: mesma data, período e mesma empresa (js/telas/boletos.js) -->
+      <div class="checagens" id="bolChecagens"></div>
+      <div id="bolResultado" hidden>
+        <p class="info-resultado mono" id="bolInfo"></p>
+        <div id="bolArea"></div>
+        <p class="nota lembrete-pagar">Na hora de pagar, confira no banco se o beneficiário e o valor batem com a planilha.</p>
+      </div>
     </section>
 
     <!-- ===================== DDA → .RET ===================== -->
@@ -350,6 +390,34 @@
         <!-- legenda montada pelo js/telas/codigo-barras.js a partir de STATUS_RR -->
         <ul class="legenda" id="ajudaStatusRr"></ul>
       </div>
+      <div class="bloco texto">
+        <h2>Conferência de boletos</h2>
+        <p><b>Arquivos.</b> Escolha a empresa (só CRV Matriz e CRV Filial, que têm Itaú) e envie o DDA do Itaú
+           ("Consulta Boletos Recebidos") e o relatório "Duplicatas em Aberto Modelo A" do sistema, da <b>mesma empresa</b>
+           e do <b>mesmo dia</b>. Relatório de outra empresa, ou DDA de outro banco ou de outra conta, aparece num alerta e a
+           conferência não é feita. Acima do resultado, as checagens comparam a data dos dois arquivos, o período do relatório
+           e quantos boletos casaram (menos de 10% = os arquivos podem ser de empresas diferentes).</p>
+        <p><b>Como casa.</b> Cada título do sistema <b>sem</b> código de barras procura um boleto no DDA com pelo menos
+           <b>2 sinais</b> entre nome (uma palavra forte em comum), NF (a NF, com 3 dígitos ou mais, no começo do Nº Doc.) e
+           valor (igual ao centavo ao "Até Venc." ou ao "A Pagar"). Só o valor nunca casa. Um boleto que paga várias NFs do
+           mesmo fornecedor (soma exata, ao centavo) vira um <b>boleto agrupado</b>.
+           Títulos que já têm código no sistema ficam fora: o código só é conferido e procurado no DDA.</p>
+        <p><b>As abas.</b> <b>Com boleto</b>: título e boleto sem nenhuma pendência, com a linha digitável para copiar.
+           <b>Verificação</b>: primeiro os boletos agrupados (linha azul do boleto e, embaixo, as NFs que o compõem), depois
+           os casos em amarelo com a frase do que verificar, e por último, em vermelho, os códigos do sistema errados.
+           <b>Sem boleto</b>: títulos sem boleto no DDA, com folha e impostos somados por tipo no fim.
+           <b>DDA sem título no sistema</b>: boletos que não casaram com nada, do maior para o menor.
+           Se o período tem mais de um vencimento, cada aba é separada por data, com subtotais.</p>
+        <p><b>O que fazer.</b> Boleto agrupado: pagar <b>uma vez só</b>. Título cedido a factoring/fundo: confirmar a cessão
+           com o fornecedor. Boleto trocado: ligar para o fornecedor e não pagar os dois. Código inválido no sistema: corrigir o
+           lançamento (o site nunca corrige o código). Código bloqueado: não há linha digitável para copiar; peça o boleto certo.</p>
+        <p>O código de barras é lido sempre como texto e só vira linha digitável se passar em tudo: tamanho, dígitos
+           verificadores, ida e volta, banco e valor iguais aos do DDA. O Excel é lido de volta antes do download: se alguma
+           linha digitável ficar diferente da tela, o download é cancelado.</p>
+        <!-- legenda montada pelo js/telas/boletos.js a partir de STATUS_BOL -->
+        <ul class="legenda" id="ajudaStatusBol"></ul>
+        <p class="nota"><b>Na hora de pagar, confira no banco se o beneficiário e o valor batem com a planilha.</b></p>
+      </div>
     </section>
 
     <!-- ===================== PERFIL ===================== -->
@@ -380,11 +448,13 @@
 <script src="js/conferencias/nomes.js"></script>
 <script src="js/conferencias/codigo-barras.js"></script>
 <script src="js/conferencias/relatorio-contra-relatorio.js"></script>
+<script src="js/conferencias/boletos.js"></script>
 <script src="js/excel.js"></script>
 <script src="js/telas/resultado.js"></script>
 <script src="js/telas/dda-bradesco.js"></script>
 <script src="js/telas/conferencia-dda.js"></script>
 <script src="js/telas/codigo-barras.js"></script>
+<script src="js/telas/boletos.js"></script>
 <script src="js/app.js"></script>
 </body>
 </html>

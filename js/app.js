@@ -273,6 +273,7 @@ function iniciaApp(){
   // cada tela liga os seus próprios botões e caixas (js/telas/)
   iniciaTelaDda();
   iniciaTelaCodigoBarras();
+  iniciaTelaBoletos();
 
   sincronizaTela();
 }

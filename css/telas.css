@@ -97,6 +97,8 @@
 .st-alerta{--cor:var(--alerta-texto);--cor-fundo:var(--alerta-fundo)}
 .st-neutro{--cor:var(--neutro-texto);--cor-fundo:var(--neutro-fundo)}
 .st-confirmar{--cor:var(--confirmar-texto);--cor-fundo:var(--confirmar-fundo)}
+.st-grupo {--cor:var(--grupo-texto); --cor-fundo:var(--grupo-fundo)}
+.st-compoe{--cor:var(--grupo-texto); --cor-fundo:var(--compoe-fundo)}
 
 /* ---------- Abas ---------- */
 .abas{display:flex;gap:var(--esp-1);border-bottom:1px solid var(--borda);overflow-x:auto;margin-top:var(--esp-5)}
@@ -151,6 +153,35 @@
 .tabela tr.linha-alerta td{background:var(--alerta-fundo)}
 .tabela tr.linha-alerta td:first-child{box-shadow:inset 4px 0 0 var(--alerta-texto)}
 .tabela .codigo-igual{color:var(--alerta-texto);font-weight:600}
+
+/* ---------- Conferência de boletos ---------- */
+#bolResultado:not([hidden]){margin-top:var(--esp-5)}
+/* checagens dos arquivos (data, período, empresa): mensagens com título e lista que abre */
+.checagens:not(:empty){margin-top:var(--esp-4);display:grid;gap:var(--esp-3)}
+.checagens .mensagem + .mensagem{margin-top:0}
+.checagem-titulo{font-weight:600}
+.checagem-texto{margin-top:var(--esp-1);font-weight:400}
+.checagem-lista{margin-top:var(--esp-2);font-size:13px;font-weight:400}
+.checagem-lista summary{cursor:pointer;font-weight:500}
+.checagem-lista ul{margin:var(--esp-2) 0 0 var(--esp-5)}
+/* linhas da tabela pela cor do status; o boleto agrupado em negrito, as NFs dele recuadas */
+.tabela-boletos tr.bol-grupo td{background:var(--grupo-fundo);font-weight:600}
+.tabela-boletos tr.bol-compoe td{background:var(--compoe-fundo);font-size:13px}
+.tabela-boletos tr.bol-compoe .forn-nome{padding-left:var(--esp-4)}
+.tabela-boletos tr.bol-bloq td:first-child,
+.tabela-boletos tr.bol-codsis td:first-child{box-shadow:inset 4px 0 0 var(--alerta-texto)}
+.tabela-boletos tr.bol-verif td:first-child{box-shadow:inset 4px 0 0 var(--aviso-texto)}
+.tabela-boletos tr.bol-faixa td{background:var(--destaque-claro);color:var(--destaque-escuro);font-weight:600}
+.tabela-boletos tr.bol-subtotal td{background:var(--superficie-suave);color:var(--destaque-escuro);font-weight:600}
+.tabela-boletos .forn .etiqueta{margin-bottom:var(--esp-1)}
+.tabela-boletos .forn-nome{display:block}
+.tabela-boletos .verificar{min-width:260px;font-size:13px}
+.tabela-boletos .cod-bol{min-width:250px}
+.tabela-boletos .linha-dig{display:block;font-size:12px;word-break:break-all}
+.botao-copiar{margin-top:var(--esp-1);padding:3px 10px;font-size:12px}
+.botao-copiar.copiado{border-color:var(--ok-texto);color:var(--ok-texto);background:var(--ok-fundo)}
+.botao-copiar.falhou{border-color:var(--alerta-texto);color:var(--alerta-texto);background:var(--alerta-fundo)}
+.lembrete-pagar{margin-top:var(--esp-3)}
 
 /* ---------- Texto corrido (Ajuda, Perfil) ---------- */
 .texto p + p, .texto h2 + p, .texto p + ul, .texto ul + p{margin-top:var(--esp-3)}

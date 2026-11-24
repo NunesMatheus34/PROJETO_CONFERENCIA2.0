@@ -14,6 +14,13 @@ function cria(tag, classe, texto){
   return el;
 }
 
+// Cria um elemento com classe e os filhos dados (os que forem false/null são pulados).
+function criaCom(tag, classe, filhos){
+  const el = cria(tag, classe);
+  filhos.filter(Boolean).forEach(f => el.appendChild(f));
+  return el;
+}
+
 // "1 título" ou "N títulos", para o rodapé da tabela.
 function qtdTitulos(n){ return n === 1 ? '1 título' : `${n} títulos`; }
 

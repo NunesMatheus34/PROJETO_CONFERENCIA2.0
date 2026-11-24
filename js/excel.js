@@ -4,6 +4,10 @@
    e baixa no computador. Tudo no navegador (ExcelJS), nada vai para
    servidor. Cada aba tem, na linha 1, o título com a cor do status (as
    mesmas cores de css/base.css) e, na linha 2, o cabeçalho.
+   A Conferência de Boletos tem um Excel próprio (no fim do arquivo), com o
+   mesmo desenho do projeto antigo: cabeçalho na linha 1, faixas por data,
+   cada linha com a cor do status, e a releitura do arquivo gerado antes de
+   liberar o download.
    Precisa do ExcelJS carregado antes, pelo index.html.
    ===================================================================== */
 
@@ -14,6 +18,8 @@ const CORES_STATUS = {
   alerta:    { texto:'FF9A2A1C', fundo:'FFFBE5E2' },
   confirmar: { texto:'FF4B3A8C', fundo:'FFECE7F8' },
   neutro:    { texto:'FF46544F', fundo:'FFEDF0EF' },
+  grupo:     { texto:'FF1F4E8C', fundo:'FFDCE8F7' },   // azul: boleto agrupado (Conferência de Boletos)
+  compoe:    { texto:'FF1F4E8C', fundo:'FFF1F6FC' },   // azul claro: NF que compõe o boleto agrupado
 };
 const BORDA_FINA = { top:{style:'thin'}, left:{style:'thin'}, bottom:{style:'thin'}, right:{style:'thin'} };
 
@@ -80,4 +86,98 @@ function baixaArquivo(conteudo, nomeArquivo){
   a.href = url; a.download = nomeArquivo;
   a.click();
   URL.revokeObjectURL(url);
+}
+
+/* ---------------------------------------------------------------------
+   EXCEL DA CONFERÊNCIA DE BOLETOS (trazido do projeto antigo sem mudar)
+   As 4 abas, com as mesmas colunas, faixas e cores da tela. NF, código de
+   barras e linha digitável vão como TEXTO (string + numFmt '@'), para não
+   perder zero nem dígito. Antes de liberar o download, o arquivo gerado é
+   lido de volta e cada linha digitável é comparada com a da tela.
+   As abas vêm de montaAbasBol (js/conferencias/boletos.js).
+   --------------------------------------------------------------------- */
+const ARIAL = { name:'Arial', size:10 };
+// faixas por data e subtotais: não são status, só formatação (verde-petróleo do destaque)
+const ESTILO_FAIXA_BOL = { faixa:{ fundo:'FFE3F0EE', texto:'FF0A443E' }, subtotal:{ fundo:'FFF9FAFA', texto:'FF0A443E' } };
+const COR_CABECALHO_BOL = 'FF0F5C53';
+
+// Monta o arquivo (ExcelJS.Workbook) com as 4 abas da Conferência de Boletos.
+function planilhaBoletos(abas){
+  const wb = new ExcelJS.Workbook();
+  ABAS_BOL.forEach(a => {
+    const cols = colunasAbaBol(a.id);
+    const ws = wb.addWorksheet(a.planilha, { views:[{ state:'frozen', ySplit:1 }] });
+    ws.columns = cols.map(c => ({ width:c.w }));
+    const cab = ws.getRow(1);
+    cab.values = cols.map(c => c.cab);
+    cab.eachCell(c => {
+      c.font = { ...ARIAL, bold:true, color:{ argb:'FFFFFFFF' } };
+      c.fill = { type:'pattern', pattern:'solid', fgColor:{ argb:COR_CABECALHO_BOL } };
+      c.alignment = { vertical:'middle', horizontal:'center' };
+      c.border = BORDA_FINA;
+    });
+    cab.height = 20;
+    abas[a.id].forEach(r => {
+      const faixa = ehFaixa(r);
+      const valores = cols.map((c, i) => {
+        if(faixa) return i === 0 ? r.fornecedor : (c.id === 'valor' && r.valor !== null ? r.valor : '');
+        if(c.id === 'valor') return r.valor;
+        if(c.id === 'fornecedor') return r.status === 'consumo' ? `${r.fornecedor} — conta de consumo` : r.fornecedor;
+        return String(r[c.id] || '');
+      });
+      const row = ws.addRow(valores);
+      const st = faixa ? ESTILO_FAIXA_BOL[r.status] : CORES_STATUS[STATUS_BOL[r.status].cor];
+      cols.forEach((c, i) => {
+        const cel = row.getCell(i + 1);
+        cel.font = { ...ARIAL, bold: r.status === 'grupo' || faixa, color:{ argb: st.texto } };
+        cel.fill = { type:'pattern', pattern:'solid', fgColor:{ argb: st.fundo } };
+        cel.border = BORDA_FINA;
+        cel.alignment = { vertical:'top', wrapText: !faixa && (c.id === 'verificar' || c.id === 'fornecedor') };
+        if(c.texto && !(faixa && i === 0)) cel.numFmt = '@';
+        if(c.id === 'valor'){ cel.numFmt = FMT_REAL; cel.alignment = { vertical:'top', horizontal:'right' }; }
+      });
+    });
+    const res = resumoAba(abas[a.id]);
+    const rotulo = `Total${abas.porData ? ' geral' : ''} · ${res.qtd} ${res.qtd === 1 ? 'item' : 'itens'}`;
+    const tot = ws.addRow(cols.map((c, i) => i === 0 ? rotulo : c.id === 'valor' ? res.total : ''));
+    tot.eachCell({ includeEmpty:true }, (cel, i) => {
+      cel.font = { ...ARIAL, bold:true };
+      cel.border = BORDA_FINA;
+      if(cols[i - 1] && cols[i - 1].id === 'valor') cel.numFmt = FMT_REAL;
+    });
+  });
+  return wb;
+}
+
+// Lê de volta o Excel gerado e compara, aba por aba e linha por linha, a linha
+// digitável e o código de barras com os da tela. Devolve a lista de diferenças
+// (vazia = pode baixar).
+async function confereExcelBoletos(buffer, abas){
+  const wb = new ExcelJS.Workbook();
+  await wb.xlsx.load(buffer);
+  const erros = [];
+  ABAS_BOL.forEach(a => {
+    const ws = wb.getWorksheet(a.planilha);
+    if(!ws){ erros.push(`a aba "${a.planilha}" não está no arquivo`); return; }
+    const cols = colunasAbaBol(a.id);
+    const iLinha = cols.findIndex(c => c.id === 'linha') + 1, iCb = cols.findIndex(c => c.id === 'cb') + 1;
+    abas[a.id].forEach((r, k) => {
+      const row = ws.getRow(k + 2);
+      const lido = i => { const v = row.getCell(i).value; return v === null || v === undefined ? '' : v; };
+      if(iLinha && (lido(iLinha) !== r.linha || (r.linha && typeof lido(iLinha) !== 'string')))
+        erros.push(`${a.nome}, linha ${k + 2}: linha digitável no Excel "${lido(iLinha)}" ≠ tela "${r.linha}"`);
+      if(iCb && (lido(iCb) !== r.cb || (r.cb && typeof lido(iCb) !== 'string')))
+        erros.push(`${a.nome}, linha ${k + 2}: código de barras no Excel ≠ tela`);
+    });
+    if(ws.rowCount !== abas[a.id].length + 2) erros.push(`${a.nome}: o Excel tem ${ws.rowCount - 2} linhas e a tela ${abas[a.id].length}`);
+  });
+  return erros;
+}
+
+// Gera o Excel da Conferência de Boletos e confere com a tela.
+// Devolve { conteudo } para baixar, ou { erros } (e aí o download NÃO pode acontecer).
+async function excelBoletosConferido(abas){
+  const conteudo = await planilhaBoletos(abas).xlsx.writeBuffer();
+  const erros = await confereExcelBoletos(conteudo, abas);
+  return erros.length ? { erros } : { conteudo };
 }

@@ -28,6 +28,8 @@
   --alerta-fundo:#FBE5E2;  --alerta-texto:#9A2A1C;
   --neutro-fundo:#EDF0EF;  --neutro-texto:#46544F;
   --confirmar-fundo:#ECE7F8; --confirmar-texto:#4B3A8C;   /* roxo: confirmar com o fornecedor */
+  --grupo-fundo:#DCE8F7;     --grupo-texto:#1F4E8C;       /* azul: boleto agrupado (Conferência de boletos) */
+  --compoe-fundo:#F1F6FC;                                 /* azul claro: NF que compõe o boleto agrupado */
 
   /* fontes: texto em Plex Sans, números em Plex Mono (com reserva do sistema) */
   --fonte-texto:"IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
