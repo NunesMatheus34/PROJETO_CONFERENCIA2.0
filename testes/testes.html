@@ -13,12 +13,15 @@
      identificaEmpresa e a Conferência DDA (um caso de cada status, as
      travas de empresa, banco e conta, o filtro de unidade do Itaú e o Excel)
      e o Bradesco (PDFs fictícios montados na hora: Leitura OK, contagem de
-     "R$" diferente, PDF repetido, outra empresa, colunas deslocadas; e a
+     "R$" diferente, PDF repetido, outra empresa, colunas deslocadas, empresa
+     só do cabeçalho com boleto de outro Pagador, cabeçalho "DestinatárioValor"
+     grudado e coluna do beneficiário em 345 e 352; e a
      conferência com um caso de cada status), o Código de barras (um
      relatório: divergência, duplicado, código gravado como número) e o
      Relatório contra relatório (vencimento diferente casa, valor diferente
      não casa, mesmo código nas duas empresas fica vermelho, a mesma linha
-     nos dois relatórios sai da conferência e vai para a aba própria).
+     nos dois relatórios sai da conferência e vai para a aba própria) e o
+     alerta de relatório consolidado da Rubi ("Empresa(s): 1 / 4 /").
      ===================================================================== -->
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Testes da Conferência</title>
@@ -142,9 +145,17 @@ function pdfFicticio(textos, nome){
 // Textos de um DDA do Bradesco fictício, no layout do PDF do banco: topo (empresa, período),
 // cabeçalho da tabela, um bloco de 6 linhas por boleto e o rodapé "SAC".
 // opcoes: xBenef/xValor = onde começam as colunas do beneficiário e do valor (para simular
-// o PDF com colunas deslocadas); semStatus = índices dos boletos sem a linha "A PAGAR".
+// o PDF com colunas deslocadas); semStatus = índices dos boletos sem a linha "A PAGAR";
+// valorGrudado = cabeçalho com "DestinatárioValor" numa palavra só (como alguns PDFs do banco);
+// xRotuloValor = x da palavra "Valor" do cabeçalho, quando ela não fica em cima dos "R$";
+// benefNaLinhaDoPagador = "Beneficiário," na mesma linha de "Pagador," (outro layout do banco).
 function textosDdaBradesco(cnpjConta, boletos, opcoes){
-  const { xBenef = 362.9, xValor = 540.5, semStatus = [] } = opcoes || {};
+  const { xBenef = 362.9, xValor = 540.5, semStatus = [], valorGrudado = false, xRotuloValor = xValor,
+          benefNaLinhaDoPagador = false } = opcoes || {};
+  const topBenef = benefNaLinhaDoPagador ? 235.8 : 241.2;
+  const cabecalhoValor = valorGrudado
+    ? [{ top:topBenef, x:xBenef - 7.5, texto:'Beneficiário, CPF/CNPJ e Banco DestinatárioValor' }]
+    : [{ top:topBenef, x:xBenef - 7.5, texto:'Beneficiário, CPF/CNPJ e Banco Destinatário' }, { top:241.2, x:xRotuloValor, texto:'Valor' }];
   const t = [
     { top:43,    x:155.1, texto:'Boletos de Cobrança Registrados/DDA' },
     { top:58,    x:155.1, texto:'EMPRESA FICTICIA S.A | 0' + cnpjConta },
@@ -153,8 +164,7 @@ function textosDdaBradesco(cnpjConta, boletos, opcoes){
     { top:210,   x:137.8, texto:'20/11/2026 até 20/11/2026' },
     { top:235.8, x:180.7, texto:'Pagador, CPF/CNPJ e' },
     { top:239.5, x:40.3,  texto:'Data de Vencimento /' },
-    { top:241.2, x:xBenef - 7.5, texto:'Beneficiário, CPF/CNPJ e Banco Destinatário' },
-    { top:241.2, x:xValor, texto:'Valor' },
+    ...cabecalhoValor,
     { top:246.6, x:180.7, texto:'Número de documento' },
     { top:250.3, x:40.3,  texto:'Débito e Limite de Pagamento' },
   ];
@@ -477,12 +487,88 @@ async function rodaTestes(){
   await teste('Bradesco: outra empresa e colunas deslocadas', async () => {
     const l = await lePdfFicticio(textosDdaBradesco(rubiMatriz.cnpj, BOLETOS_PDF), 'Bradesco_4.pdf');
     const av = avaliaPdfBradesco(l, rubiFilial, []);
-    confere('PDF da Rubi Matriz com Rubi Filial escolhida → erro (conta e pagador)', av.situacao === 'erro' && av.erros.some(e => /conta da Rubi Matriz/.test(e)) &&
-      av.erros.some(e => /outro pagador/.test(e)), av.erros.join(' · '));
+    confere('PDF da Rubi Matriz com Rubi Filial escolhida → erro (conta do cabeçalho)', av.situacao === 'erro' && av.erros.some(e => /conta da Rubi Matriz/.test(e)) &&
+      !av.erros.some(e => /pagador/i.test(e)), av.erros.join(' · '));
     const d = await lePdfFicticio(textosDdaBradesco(rubiMatriz.cnpj, BOLETOS_PDF, { xBenef:349.5, xValor:524.5 }), 'Bradesco_5.pdf');
     confere('Colunas 13 pt mais à esquerda (como num PDF real): pagador, beneficiário e CNPJ continuam certos',
       !d.erros.length && d.boletos[0].beneficiario === 'ALFA FICTICIA PECAS LTDA' && d.boletos[0].cnpj === '011.111.111/0001-11' && d.boletos[0].pagador === 'EMPRESA FICTICIA S.A.',
       d.erros.join(' · ') || `${d.boletos[0].pagador} | ${d.boletos[0].beneficiario}`);
+  });
+
+  await teste('Bradesco: cabeçalho grudado e colunas em outros lugares', async () => {
+    // os 2 boletos lidos com nomes, CNPJs e valores certos (o que BOLETOS_PDF tem)
+    const leuCerto = l => !l.erros.length && l.boletos.length === 2 && l.qtdRS === 2 &&
+      l.boletos[0].beneficiario === 'ALFA FICTICIA PECAS LTDA' && l.boletos[0].cnpj === '011.111.111/0001-11' &&
+      l.boletos[1].beneficiario === 'XPTO FOMENTO MERCANTIL' && l.boletos[1].banco === '341 - ITAÚ UNIBANCO S.A.' &&
+      l.boletos[0].pagador === 'EMPRESA FICTICIA S.A.' && l.boletos[0].valor === 1234.56 && l.boletos[1].valor === 300;
+    const mostra = l => l.erros.join(' · ') || l.boletos.map(b => `${b.pagador} | ${b.beneficiario} | ${b.cnpj} | ${b.valor}`).join(' / ');
+
+    const grudado = await lePdfFicticio(textosDdaBradesco(rubiMatriz.cnpj, BOLETOS_PDF, { valorGrudado:true, xBenef:359.9, xValor:530.5 }), 'Bradesco_9.pdf');
+    confere('Cabeçalho com "DestinatárioValor" grudado → lê os boletos normalmente', leuCerto(grudado), mostra(grudado));
+    for(const x of [345, 352]){
+      const l = await lePdfFicticio(textosDdaBradesco(rubiMatriz.cnpj, BOLETOS_PDF, { xBenef:x, xValor:526.5 }), `Bradesco_benef_${x}.pdf`);
+      confere(`Coluna do beneficiário começando em ${x} → nomes, CNPJ e valores certos`, leuCerto(l), mostra(l));
+    }
+    const quebrado = await lePdfFicticio(textosDdaBradesco(rubiMatriz.cnpj, BOLETOS_PDF, { benefNaLinhaDoPagador:true, xBenef:358, xValor:526.5 }), 'Bradesco_10.pdf');
+    confere('"Beneficiário," numa linha e "Valor" em outra do cabeçalho → lê normalmente', leuCerto(quebrado), mostra(quebrado));
+    const rotuloLonge = await lePdfFicticio(textosDdaBradesco(rubiMatriz.cnpj, BOLETOS_PDF, { xRotuloValor:470 }), 'Bradesco_11.pdf');
+    confere('Palavra "Valor" longe dos "R$" → o limite do valor sai dos "R$" (nome do beneficiário inteiro)', leuCerto(rotuloLonge), mostra(rotuloLonge));
+    const semValor = await lePdfFicticio(textosDdaBradesco(rubiMatriz.cnpj, BOLETOS_PDF).filter(t => t.texto !== 'Valor'), 'Bradesco_12.pdf');
+    confere('Cabeçalho sem nenhuma palavra com "Valor" → erro "não achei o cabeçalho"', semValor.erros.some(e => /não achei o cabeçalho/.test(e)), mostra(semValor));
+  });
+
+  await teste('Bradesco: a empresa vem só do cabeçalho; a coluna Pagador não trava', async () => {
+    // cabeçalho da Rubi Filial; o 2º boleto tem outro pagador (prestador fictício) na coluna Pagador
+    const comPrestador = [
+      { ...BOLETOS_PDF[0], pagadorCnpj:'0' + rubiFilial.cnpj },
+      { ...BOLETOS_PDF[1], pagador:'PRESTADOR FICTICIO LTDA', pagadorCnpj:'099.999.999/0001-99' },
+    ];
+    const l = await lePdfFicticio(textosDdaBradesco(rubiFilial.cnpj, comPrestador), 'Bradesco_6.pdf');
+    const av = avaliaPdfBradesco(l, rubiFilial, []);
+    confere('Cabeçalho da Rubi Filial escolhida + boleto de outro Pagador → Leitura OK e os 2 boletos entram',
+      av.situacao === 'ok' && l.boletos.length === 2 && l.boletos[1].pagador === 'PRESTADOR FICTICIO LTDA',
+      av.erros.join(' · ') || `${av.situacao}, ${l.boletos.length} boletos`);
+    const { boletos } = boletosDosPdfsBradesco([l]);
+    confere('O boleto do outro Pagador vai para a conferência', boletos.some(b => b.pagadorCnpj === '099.999.999/0001-99'), `${boletos.length} boletos`);
+    confere('CNPJ do cabeçalho com 15 dígitos (0 à esquerda) = 14 dígitos da empresa',
+      l.empresa && cnpjBradescoParaComparar(l.empresa.cnpj) === apenasDigitos(rubiFilial.cnpj), l.empresa && l.empresa.cnpj);
+
+    // todos os boletos com o CNPJ da Rubi Filial no Pagador, mas o cabeçalho de outro CNPJ → erro
+    const outro = await lePdfFicticio(textosDdaBradesco('99.999.999/0001-99', comPrestador.map(b => ({ ...b, pagadorCnpj:'0' + rubiFilial.cnpj }))), 'Bradesco_7.pdf');
+    const avOutro = avaliaPdfBradesco(outro, rubiFilial, []);
+    confere('Cabeçalho de outro CNPJ (mesmo com o Pagador certo) → erro e não confere',
+      avOutro.situacao === 'erro' && avOutro.erros.some(e => /mas a empresa escolhida é Rubi Filial/.test(e)), avOutro.erros.join(' · '));
+
+    // a empresa NÃO pode sair de uma linha da tabela: sem o cabeçalho "NOME | CNPJ" no topo, erro
+    const semTopo = textosDdaBradesco(rubiFilial.cnpj, comPrestador).filter(t => !/\|/.test(t.texto));
+    semTopo.push({ top:298, x:188.2, texto:'EMPRESA FICTICIA S.A | 0' + rubiFilial.cnpj });
+    const lSemTopo = await lePdfFicticio(semTopo, 'Bradesco_8.pdf');
+    const avSemTopo = avaliaPdfBradesco(lSemTopo, rubiFilial, []);
+    confere('"NOME | CNPJ" só dentro da tabela (não no topo) → não vira a empresa: erro',
+      lSemTopo.empresa === null && avSemTopo.situacao === 'erro' && avSemTopo.erros.some(e => /não achei a empresa/.test(e)), avSemTopo.erros.join(' · '));
+  });
+
+  await teste('Relatório consolidado da Rubi ("Empresa(s): 1 / 4 /")', () => {
+    const rel = primeira => [[primeira], ['Duplicatas em Aberto']];
+    const CONSOLIDADO = rel('4 RUBIATABA INDUSTRIAL S A      Empresa(s): 1 / 4 /   Data/Hora : 01/12/26 09:00:00');
+    const SO_FILIAL   = rel('4 RUBIATABA INDUSTRIAL S A      Empresa(s): 4 /   Data/Hora : 01/12/26 09:00:00');
+    const ESPERADO = 'Este relatório tem mais de uma empresa (1 / 4). Tire no sistema só a empresa Rubi Filial e envie de novo.';
+    confere('Conferência DDA: "1 / 4 /" com Rubi Filial escolhida → alerta e não confere', checaRelatorioDda(rubiFilial, CONSOLIDADO) === ESPERADO,
+      checaRelatorioDda(rubiFilial, CONSOLIDADO));
+    confere('Conferência DDA: "4 /" com Rubi Filial escolhida → confere', checaRelatorioDda(rubiFilial, SO_FILIAL) === '', checaRelatorioDda(rubiFilial, SO_FILIAL));
+    const matrizConsolidada = rel('1 RUBIATABA INDUSTRIAL S A      Empresa(s): 1 / 4 /   Data/Hora : 01/12/26 09:00:00');
+    confere('Conferência DDA: "1 / 4 /" começando com 1 e Rubi Filial escolhida → o mesmo alerta de consolidado',
+      checaRelatorioDda(rubiFilial, matrizConsolidada) === ESPERADO, checaRelatorioDda(rubiFilial, matrizConsolidada));
+    confere('Código de barras (relatório contra relatório): "1 / 4 /" com Rubi Filial → alerta; "4 /" → aceito',
+      checaRelatorioCruzado(rubiFilial, CONSOLIDADO) === ESPERADO && checaRelatorioCruzado(rubiFilial, SO_FILIAL) === '', checaRelatorioCruzado(rubiFilial, CONSOLIDADO));
+    const cb = conferirCodigoBarras({ matriz: CONSOLIDADO });
+    confere('Código de barras (um relatório): "1 / 4 /" da Rubi Filial → alerta e não confere', cb.erro === ESPERADO, cb.erro || 'conferiu');
+    const crv = rel('5 CRV INDUSTRIAL LTDA      Empresa(s): 1 / 5 /   Data/Hora : 01/12/26 09:00:00');
+    const crvFilial = EMPRESAS.find(e => e.id === 'crv-filial');
+    confere('CRV: "Empresa(s): 1 / 5 /" NÃO é usado → sem alerta de consolidado', checaRelatorioDda(crvFilial, crv) === '' &&
+      alertaRelatorioConsolidado(crvFilial, crv) === '', checaRelatorioDda(crvFilial, crv));
+    const soMatriz = rel('1 RUBIATABA INDUSTRIAL S A      Empresa(s): 1 /   Data/Hora : 01/12/26 09:00:00');
+    confere('Rubi Matriz com "1 /" → confere', checaRelatorioDda(rubiMatriz, soMatriz) === '', checaRelatorioDda(rubiMatriz, soMatriz));
   });
 
   await teste('Bradesco: boletos de vários PDFs', () => {

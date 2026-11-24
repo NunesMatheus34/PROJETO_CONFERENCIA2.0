@@ -10,7 +10,8 @@
    ou string, por codigoBarrasDaCelula). Célula que o Excel gravou como
    número fica de fora e é listada como ilegível (o antigo pulava calado).
    Nada aqui completa ou corrige código, valor ou vencimento.
-   Precisa de js/leitura/formatos.js e js/leitura/planilha.js.
+   Relatório consolidado da Rubi ("Empresa(s): 1 / 4 /") não é conferido.
+   Precisa de js/leitura/formatos.js, js/leitura/planilha.js e js/empresas.js.
    ===================================================================== */
 
 // Status desta conferência, na ordem dos cartões e das abas. O mesmo nome e a mesma
@@ -124,7 +125,11 @@ function achaDuplicados(titulos){
 // Roda a conferência num relatório já lido (lerMatrizComTexto).
 // Devolve { erro } ou { titulos, divergencias, duplicados, ilegiveis }.
 // Cada título ganha idx (a posição dele), para a tela saber quem é quem.
+// Aqui não se escolhe empresa: a da 1ª linha (identificaEmpresa) é a "escolhida" e, se for
+// da Rubi com outra empresa no "Empresa(s): 1 / 4 /", não confere (relatório consolidado).
 function conferirCodigoBarras(leitura){
+  const consolidado = alertaRelatorioConsolidado(identificaEmpresa(leitura.matriz), leitura.matriz);
+  if(consolidado) return { erro: consolidado };
   const headerIdx = acharCabecalho(leitura.matriz);
   if(headerIdx<0) return { erro: 'Não encontrei a linha de cabeçalho (preciso de uma linha com "Código de Barras" e "Saldo" juntos).' };
   const cols = mapeiaColunas(leitura.matriz[headerIdx]);

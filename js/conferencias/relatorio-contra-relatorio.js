@@ -111,8 +111,11 @@ function separaMesmaLinha(titulosA, titulosB){
 }
 
 // Confere o relatório de uma caixa: a empresa da 1ª linha (identificaEmpresa) tem que
-// ser a escolhida na caixa. Devolve o texto do alerta ou ''.
+// ser a escolhida na caixa e, na Rubi, o relatório não pode ser consolidado
+// ("Empresa(s): 1 / 4 /", alertaRelatorioConsolidado). Devolve o texto do alerta ou ''.
 function checaRelatorioCruzado(empresa, matriz){
+  const consolidado = alertaRelatorioConsolidado(empresa, matriz);
+  if(consolidado) return consolidado;
   const achada = identificaEmpresa(matriz);
   if(!achada) return 'Não reconheci a empresa deste relatório pela 1ª linha. Confira se é o relatório de títulos a pagar do sistema.';
   if(achada.id !== empresa.id) return `Este relatório é da ${achada.nome}, mas a empresa escolhida nesta caixa é ${empresa.nome}.`;

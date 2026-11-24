@@ -33,9 +33,12 @@ const STATUS_DDA = [
    TRAVAS ANTES DE CONFERIR
    --------------------------------------------------------------------- */
 
-// Confere se o relatório do sistema é da empresa escolhida (pela 1ª linha).
+// Confere se o relatório do sistema é da empresa escolhida (pela 1ª linha) e, na Rubi,
+// se não é um relatório consolidado ("Empresa(s): 1 / 4 /").
 // Devolve '' quando está certo, ou o texto do alerta (e a conferência não roda).
 function checaRelatorioDda(empresa, matrizSistema){
+  const consolidado = alertaRelatorioConsolidado(empresa, matrizSistema);
+  if(consolidado) return consolidado;
   const achada = identificaEmpresa(matrizSistema);
   if(!achada) return 'Não reconheci a empresa deste relatório pela 1ª linha. Confira se é o relatório de títulos a pagar do sistema.';
   if(achada.id !== empresa.id)
@@ -415,9 +418,12 @@ function assinaturaPdfBradesco(leitura){
 
 // Decide a situação de um PDF recém-lido (leitura = o que leitorBradesco devolve):
 //   'repetido' = mesmo conteúdo de um PDF já enviado (ignorado, só avisa);
-//   'erro'     = não pode entrar (erro de leitura, outra empresa, outro pagador);
+//   'erro'     = não pode entrar (erro de leitura, cabeçalho de outra empresa ou conta);
 //   'ok'       = Leitura OK.
 // anteriores = os PDFs já enviados nesta conferência ({ leitura, situacao }).
+// A empresa vem SÓ do cabeçalho do topo da página 1 (nome | CNPJ). A coluna "Pagador" de
+// cada boleto não trava nada: ali pode vir outro nome e CNPJ (ex.: um prestador) e o
+// boleto continua sendo da empresa do cabeçalho.
 // Devolve { situacao, erros, repetidoDe }.
 function avaliaPdfBradesco(leitura, empresa, anteriores){
   const assinatura = assinaturaPdfBradesco(leitura);
@@ -433,10 +439,6 @@ function avaliaPdfBradesco(leitura, empresa, anteriores){
       erros.push(`o PDF é da conta ${dona ? 'da ' + dona.nome : leitura.empresa.nome + ' · ' + leitura.empresa.cnpj}, mas a empresa escolhida é ${empresa.nome}`);
     }
   }
-  const outros = leitura.boletos.filter(b => b.pagadorCnpj && cnpjBradescoParaComparar(b.pagadorCnpj) !== cnpjEmpresa);
-  if(outros.length)
-    erros.push(`${outros.length === 1 ? 'o boleto' : 'os boletos'} ${outros.map(b => b.n).join(', ')} ` +
-               `${outros.length === 1 ? 'tem' : 'têm'} outro pagador (${outros[0].pagador} · ${outros[0].pagadorCnpj}), não a ${empresa.nome}`);
   return { situacao: erros.length ? 'erro' : 'ok', erros, repetidoDe: '' };
 }
 
