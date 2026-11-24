@@ -3,7 +3,7 @@
      CONFERÊNCIA DDA 2.0 — página única
      Menu lateral à esquerda; cada tela é uma <section> que o menu mostra e
      esconde pelo #endereço (js/app.js). Planilhas são lidas só no navegador.
-     Telas prontas: Conferência DDA (Santander e Itaú). As outras chegam nas próximas etapas.
+     Telas prontas: Conferência DDA (Santander, Itaú e Bradesco). As outras chegam nas próximas etapas.
      ===================================================================== -->
 <html lang="pt-BR">
 <head>
@@ -19,6 +19,16 @@
 <!-- ExcelJS (gerar o Excel de resultado no navegador): versão fixa + integrity (SRI) -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"
         integrity="sha384-Pqp51FUN2/qzfxZxBCtF0stpc9ONI6MYZpVqmo8m20SoaQCzf+arZvACkLkirlPz"
+        crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+
+<!-- pdf.js (ler o PDF do DDA do Bradesco no navegador): versão fixa + integrity (SRI).
+     As duas partes rodam na própria página (sem worker separado), para o SRI valer nas duas;
+     cada uma cria a sua variável global (pdfjsWorker e pdfjsLib), usadas por js/leitura/pdf.js. -->
+<script type="module" src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/6.5.438/pdf.worker.min.mjs"
+        integrity="sha384-/+r9qqXFj/8aZJ0d2yiuf6sqAR9T1UyN6NdZoI8cMvzccicdUNx62wDS8JsPedce"
+        crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<script type="module" src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/6.5.438/pdf.min.mjs"
+        integrity="sha384-6MTG6VynDVMfHzijur0VKc9BdrA6HaXHZd+pK6iGWh2acDj3CibR0CRwHizMoy1N"
         crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 
 <!-- Fonte IBM Plex (não existe no cdnjs; sem ela a página usa a fonte do sistema) -->
@@ -90,6 +100,7 @@
               <option value="">Escolha o banco</option>
               <option value="santander">Santander</option>
               <option value="itau">Itaú</option>
+              <option value="bradesco">Bradesco</option>
             </select>
           </label>
           <label class="campo">
@@ -107,7 +118,8 @@
             </select>
           </label>
         </div>
-        <div class="envios">
+        <!-- Santander e Itaú: as duas caixas lado a lado -->
+        <div class="envios" id="ddaEnviosPadrao">
           <label class="caixa-envio travada" id="ddaCaixaBanco">
             <input type="file" class="caixa-envio-input" accept=".xlsx,.xls" disabled>
             <svg class="ico" aria-hidden="true"><use href="#i-arquivo"/></svg>
@@ -122,6 +134,31 @@
             <span class="caixa-envio-dica">Excel de títulos a pagar da empresa escolhida. Arraste o arquivo aqui ou clique para escolher.</span>
             <span class="caixa-envio-arquivo">Escolha o banco e a empresa primeiro</span>
           </label>
+        </div>
+        <!-- Bradesco: 2 passos. O passo 2 só destrava com a "Leitura OK" de todos os PDFs do passo 1 -->
+        <div class="passos" id="ddaPassosBradesco" hidden>
+          <div class="passo">
+            <p class="passo-titulo"><span class="passo-numero">1</span>PDFs do DDA do Bradesco</p>
+            <label class="caixa-envio travada" id="ddaCaixaPdfs">
+              <input type="file" class="caixa-envio-input" accept=".pdf,application/pdf" multiple disabled>
+              <svg class="ico" aria-hidden="true"><use href="#i-arquivo"/></svg>
+              <span class="caixa-envio-titulo">PDFs "Bradesco_...pdf"</span>
+              <span class="caixa-envio-dica">O banco libera 1 página por arquivo: envie todos. Pode escolher vários de uma vez ou ir soltando um por um.</span>
+              <span class="caixa-envio-arquivo">Escolha o banco e a empresa primeiro</span>
+            </label>
+            <div class="tabela-caixa leitura-pdfs" id="ddaLeituraPdfs" hidden></div>
+            <div class="mensagem" id="ddaLeituraResumo" role="status" hidden></div>
+          </div>
+          <div class="passo">
+            <p class="passo-titulo"><span class="passo-numero">2</span>Relatório do sistema (Rubi)</p>
+            <label class="caixa-envio travada" id="ddaCaixaSistemaBradesco">
+              <input type="file" class="caixa-envio-input" accept=".xlsx,.xls" disabled>
+              <svg class="ico" aria-hidden="true"><use href="#i-arquivo"/></svg>
+              <span class="caixa-envio-titulo">Relatório do sistema</span>
+              <span class="caixa-envio-dica">Excel "Duplicatas em Aberto" da empresa escolhida. Arraste o arquivo aqui ou clique para escolher.</span>
+              <span class="caixa-envio-arquivo">Libera depois da Leitura OK do passo 1</span>
+            </label>
+          </div>
         </div>
         <div class="acoes">
           <button type="button" class="botao botao-principal" id="ddaConferir" disabled>Conferir</button>
@@ -178,12 +215,21 @@
         <p>Os arquivos são lidos só neste navegador: nenhuma planilha, PDF ou boleto é enviado para servidor.</p>
       </div>
       <div class="bloco texto">
-        <h2>Conferência DDA (Santander e Itaú)</h2>
+        <h2>Conferência DDA</h2>
         <p>1. Escolha o banco e a empresa. 2. Envie o DDA do banco e o relatório de títulos a pagar do sistema.
            Se o relatório for de outra empresa, ou o DDA for de outro banco ou de outra conta, aparece um alerta e a conferência não é feita.
            3. Clique em Conferir. Cada boleto procura um título do sistema pelo valor (diferença de até 1 centavo),
            primeiro com nome e vencimento iguais, depois só com o nome, depois só com o valor.</p>
         <p>No Itaú dá para conferir só uma unidade do pagador (CRV Industrial sem Capinópolis, ou Unidade Capinópolis); o padrão é Todas.</p>
+        <p><b>Bradesco</b> (só Rubi Matriz e Rubi Filial), em 2 passos. Passo 1: envie todos os PDFs "Bradesco_...pdf" do DDA.
+           Cada PDF só entra com Leitura OK: a quantidade de valores "R$" do PDF tem que ser igual à de boletos lidos, nenhum
+           boleto pode ter campo faltando e o pagador tem que ser a empresa escolhida. PDF repetido (mesmos boletos) é ignorado,
+           com aviso. Passo 2: envie o relatório "Duplicatas em Aberto" do sistema.
+           No Bradesco cada título do sistema procura um boleto com o <b>mesmo valor, ao centavo</b>: primeiro com nome parecido e mesmo vencimento,
+           depois só com nome parecido, depois só com o mesmo vencimento. "Só no banco" traz só boletos que vencem numa das datas do relatório;
+           os outros são contados no aviso acima do resultado.
+           Avisos na tabela: "cedido a factoring/fundo" (o boleto está em nome de outra empresa, com cara de factoring ou fundo)
+           e "sem Nº Doc." (o banco mostrou só asteriscos no número do documento: confira a NF).</p>
         <!-- legenda montada pelo js/telas/conferencia-dda.js a partir de STATUS_DDA (mesmo nome e cor da tela e do Excel) -->
         <ul class="legenda" id="ajudaStatusDda"></ul>
         <p class="nota">No Excel, Conferidos, Datas divergentes e Nome divergente trazem o saldo do sistema; na tela, o valor do boleto.
@@ -208,14 +254,17 @@
 <script src="js/leitura/planilha.js"></script>
 <script src="js/leitura/caixa-envio.js"></script>
 <script src="js/leitura/mensagens.js"></script>
+<script src="js/leitura/pdf.js"></script>
 <script src="js/empresas.js"></script>
 <script src="js/bancos/itau.js"></script>
 <script src="js/bancos/santander.js"></script>
+<script src="js/bancos/bradesco.js"></script>
 <script src="js/bancos/detecta.js"></script>
 <script src="js/boleto.js"></script>
 <script src="js/conferencias/dda.js"></script>
 <script src="js/excel.js"></script>
 <script src="js/telas/resultado.js"></script>
+<script src="js/telas/dda-bradesco.js"></script>
 <script src="js/telas/conferencia-dda.js"></script>
 <script src="js/app.js"></script>
 </body>

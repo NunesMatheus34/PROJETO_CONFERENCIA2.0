@@ -6,8 +6,9 @@
    Precisa de js/leitura/formatos.js e js/bancos/itau.js (achaCabecalhoItau).
    ===================================================================== */
 
-// Nome de cada banco para mostrar na tela.
-const NOMES_BANCO = { santander:'Santander', itau:'Itaú' };
+// Nome de cada banco para mostrar na tela (o mesmo nome usado em EMPRESAS.bancos).
+// O Bradesco vem em PDF e é reconhecido pelo próprio leitor (js/bancos/bradesco.js).
+const NOMES_BANCO = { santander:'Santander', itau:'Itaú', bradesco:'Bradesco' };
 
 // Descobre o banco do DDA pela matriz do Excel: 'santander', 'itau' ou null se não reconhecer.
 // Itaú: tem a linha de cabeçalho com "Beneficiário" e "Código de barras".

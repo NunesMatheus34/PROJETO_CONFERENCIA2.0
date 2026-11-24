@@ -1,10 +1,12 @@
 /* =====================================================================
-   TELA: CONFERÊNCIA DDA (Santander e Itaú)
-   Só desenha e reage aos cliques: banco e empresa no topo, as duas caixas
+   TELA: CONFERÊNCIA DDA (Santander, Itaú e Bradesco)
+   Só desenha e reage aos cliques: banco e empresa no topo, as caixas
    de arquivo, os alertas, o resultado (cartões, abas, busca, tabela) e o
    botão do Excel. As regras ficam em js/conferencias/dda.js.
    Ordem: banco + empresa destravam as caixas -> cada arquivo é conferido
    ao ser enviado (empresa, banco, conta) -> Conferir.
+   Santander e Itaú: duas caixas lado a lado. Bradesco: 2 passos (PDFs e
+   depois o relatório), desenhados por js/telas/dda-bradesco.js.
    Dado de arquivo vai para a tela sempre com textContent.
    ===================================================================== */
 
@@ -19,13 +21,14 @@ const telaDda = {
   // a pessoa trocar banco/empresa, clicar em Nova conferência ou mandar outro arquivo, a
   // leitura antiga é descartada ao terminar (senão um arquivo aprovado para uma empresa
   // ficaria valendo para outra).
-  pedido: { dda:0, sistema:0 },
+  pedido: { dda:0, sistema:0, pdfs:0 },
+  // Bradesco (js/telas/dda-bradesco.js): pdfs, lendoPdfs, filaPdfs, passo2Livre, infoBradesco
 };
 
 // Atalho para os elementos da tela.
 const elDda = id => document.getElementById(id);
 
-// Banco ('santander' | 'itau' | '') e empresa (da tabela EMPRESAS ou null) escolhidos no topo.
+// Banco ('santander' | 'itau' | 'bradesco' | '') e empresa (da tabela EMPRESAS ou null) escolhidos no topo.
 function escolhaDda(){
   const banco = elDda('ddaBanco').value;
   const empresa = EMPRESAS.find(e => e.id === elDda('ddaEmpresa').value) || null;
@@ -53,6 +56,8 @@ function trocaBancoDda(){
   if([...sel.options].some(o => o.value === anterior)) sel.value = anterior;
   elDda('ddaCampoUnidade').hidden = banco !== 'itau';
   elDda('ddaUnidade').value = 'todas';
+  elDda('ddaEnviosPadrao').hidden = banco === 'bradesco';
+  elDda('ddaPassosBradesco').hidden = banco !== 'bradesco';
   recomecaDda();
 }
 
@@ -64,6 +69,7 @@ function recomecaDda(){
   const texto = travada ? 'Escolha o banco e a empresa primeiro' : 'Nenhum arquivo escolhido';
   preparaCaixaEnvio(elDda('ddaCaixaBanco'), travada, texto);
   preparaCaixaEnvio(elDda('ddaCaixaSistema'), travada, texto);
+  recomecaBradesco(travada);
   telaDda.pedido.dda++; telaDda.pedido.sistema++;   // descarta leituras ainda em andamento
   Object.assign(telaDda, { leituraDda:null, matrizSistema:null, alertaDda:'', alertaSistema:'', avisoDda:'',
                            boletos:null, sistema:null, consulta:'', resultado:null });
@@ -73,7 +79,7 @@ function recomecaDda(){
 }
 
 // Mostra os alertas (vermelho, grande) e o aviso (amarelo) do momento e
-// libera o Conferir só com os dois arquivos aprovados.
+// libera o Conferir só com os dois lados aprovados (Bradesco: PDFs com Leitura OK).
 function mostraAlertasDda(){
   const alertas = [telaDda.alertaDda, telaDda.alertaSistema].filter(Boolean);
   const caixa = elDda('ddaAlerta');
@@ -83,7 +89,8 @@ function mostraAlertasDda(){
   }else limpaMensagem(caixa);
   if(telaDda.avisoDda) mostraMensagem(elDda('ddaAviso'), 'aviso', telaDda.avisoDda);
   else limpaMensagem(elDda('ddaAviso'));
-  elDda('ddaConferir').disabled = !(telaDda.leituraDda && telaDda.matrizSistema);
+  const bancoPronto = escolhaDda().banco === 'bradesco' ? pdfsBradescoProntos() : !!telaDda.leituraDda;
+  elDda('ddaConferir').disabled = !(bancoPronto && telaDda.matrizSistema);
   elDda('ddaBaixar').disabled = !telaDda.resultado;
 }
 
@@ -123,9 +130,12 @@ async function recebeDdaDda(arquivo){
   mostraAlertasDda();
 }
 
-// Relatório enviado: lê e confere pela 1ª linha se é da empresa escolhida.
+// Relatório enviado: lê e confere pela 1ª linha se é da empresa escolhida
+// (no Bradesco, também se tem as colunas do relatório Rubi). caixa = de onde veio
+// (Santander/Itaú: ddaCaixaSistema; Bradesco: a do passo 2).
 // Se banco, empresa ou arquivo mudarem durante a leitura, o resultado é descartado.
-async function recebeSistemaDda(arquivo){
+async function recebeSistemaDda(arquivo, caixa){
+  caixa = caixa || elDda('ddaCaixaSistema');
   const { banco, empresa } = escolhaDda();
   const meu = ++telaDda.pedido.sistema;
   telaDda.matrizSistema = null; telaDda.alertaSistema = ''; telaDda.resultado = null;
@@ -134,13 +144,13 @@ async function recebeSistemaDda(arquivo){
   try{
     const { matriz } = await lerMatrizComTexto(arquivo);
     if(!leituraAindaValeDda('sistema', meu, banco, empresa)) return;
-    const alerta = checaRelatorioDda(empresa, matriz);
-    if(alerta){ telaDda.alertaSistema = alerta; recusaArquivoDda(elDda('ddaCaixaSistema')); }
+    const alerta = checaRelatorioDda(empresa, matriz) || (banco === 'bradesco' ? extraiSistemaBradesco(matriz).erro : '');
+    if(alerta){ telaDda.alertaSistema = alerta; recusaArquivoDda(caixa); }
     else telaDda.matrizSistema = matriz;
   }catch(err){
     if(!leituraAindaValeDda('sistema', meu, banco, empresa)) return;
     telaDda.alertaSistema = 'Não consegui ler o relatório: ' + (err.message || err);
-    recusaArquivoDda(elDda('ddaCaixaSistema'));
+    recusaArquivoDda(caixa);
   }
   mostraAlertasDda();
 }
@@ -148,6 +158,10 @@ async function recebeSistemaDda(arquivo){
 // Botão Conferir: lê os boletos e os títulos e mostra o resultado.
 function confereDda(){
   const { banco } = escolhaDda();
+  if(banco === 'bradesco'){
+    if(telaDda.matrizSistema && preparaConferenciaBradesco()) mostraResultadoDda();
+    return;
+  }
   if(!telaDda.leituraDda || !telaDda.matrizSistema) return;
   const m = telaDda.leituraDda.matriz;
   const boletos = banco === 'itau' ? leitorItau(telaDda.leituraDda) : leitorSantander(m);
@@ -170,15 +184,17 @@ function confereDda(){
 
 // Roda a conferência (com a unidade escolhida, no Itaú) e desenha o resultado.
 // Trocar a unidade depois de conferir chama de novo, como no antigo.
+// O Bradesco tem regra própria (conferirBradesco) e linha de informação própria.
 function mostraResultadoDda(){
   const { banco } = escolhaDda();
   const unidade = banco === 'itau' ? elDda('ddaUnidade').value : 'todas';
   const boletos = boletosDaUnidade(telaDda.boletos, unidade);
-  telaDda.resultado = conferir(boletos, telaDda.sistema);
+  telaDda.resultado = banco === 'bradesco' ? conferirBradesco(telaDda.boletos, telaDda.sistema) : conferir(boletos, telaDda.sistema);
 
-  // linha de informação do Itaú (consulta, boletos por unidade, descontos)
+  // linha de informação do Itaú (consulta, boletos por unidade, descontos) e do Bradesco (PDFs, boletos)
   const info = elDda('ddaInfo');
-  if(banco === 'itau'){
+  if(banco === 'bradesco') infoResultadoBradesco(telaDda.resultado);
+  else if(banco === 'itau'){
     const porUnidade = { 'sem-capinopolis':0, capinopolis:0 };
     telaDda.boletos.forEach(b => porUnidade[unidadeDoPagador(b.pagador)]++);
     const comDesconto = boletos.filter(b => b.comDesconto).length;
@@ -210,7 +226,9 @@ const MSG_VAZIO_DDA = {
 
 // Colunas da tabela. Santander: vencimento, fornecedor e valor.
 // Itaú: também Nº Doc./NF, CNPJ, banco emissor e código de barras.
+// Bradesco: as de colunasTelaBradesco (NF do sistema, Nº Doc. do Bradesco, avisos).
 function colunasTelaDda(banco){
+  if(banco === 'bradesco') return colunasTelaBradesco();
   const vencimento = { cab:'Vencimento', classe:'mono', celula: l => {
     const b = l.banco, s = l.sistema;
     return textoComSub(dataBR(b ? b.venc : s.venc), l.status === 'data' ? 'Sistema: ' + dataBR(s.venc) : '');
@@ -246,7 +264,8 @@ async function baixaExcelDda(){
   if(!telaDda.resultado) return;
   const { banco, empresa } = escolhaDda();
   const unidade = banco === 'itau' ? elDda('ddaUnidade').value : 'todas';
-  const conteudo = await montaExcel(abasExcelDda(telaDda.resultado, banco, unidade));
+  const abas = banco === 'bradesco' ? abasExcelBradesco(telaDda.resultado) : abasExcelDda(telaDda.resultado, banco, unidade);
+  const conteudo = await montaExcel(abas);
   baixaArquivo(conteudo, `conferencia-dda-${banco}-${empresa.id}.xlsx`);
 }
 
@@ -267,7 +286,8 @@ function iniciaTelaDda(){
   elDda('ddaEmpresa').addEventListener('change', recomecaDda);
   elDda('ddaUnidade').addEventListener('change', () => { if(telaDda.resultado) mostraResultadoDda(); });
   ligaCaixaEnvio(elDda('ddaCaixaBanco'), recebeDdaDda);
-  ligaCaixaEnvio(elDda('ddaCaixaSistema'), recebeSistemaDda);
+  ligaCaixaEnvio(elDda('ddaCaixaSistema'), arquivo => recebeSistemaDda(arquivo, elDda('ddaCaixaSistema')));
+  iniciaPassosBradesco();
   elDda('ddaConferir').addEventListener('click', confereDda);
   elDda('ddaBaixar').addEventListener('click', baixaExcelDda);
   elDda('ddaNova').addEventListener('click', recomecaDda);

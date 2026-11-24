@@ -7,7 +7,10 @@
      Hoje cobrem: módulo de boleto (os testes do projeto antigo e mais
      alguns bloqueios), leitura de Excel com o código como texto, o
      identificaEmpresa e a Conferência DDA (um caso de cada status, as
-     travas de empresa, banco e conta, o filtro de unidade do Itaú e o Excel).
+     travas de empresa, banco e conta, o filtro de unidade do Itaú e o Excel)
+     e o Bradesco (PDFs fictícios montados na hora: Leitura OK, contagem de
+     "R$" diferente, PDF repetido, outra empresa, colunas deslocadas; e a
+     conferência com um caso de cada status).
      ===================================================================== -->
 <html lang="pt-BR">
 <head>
@@ -21,6 +24,14 @@
         crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"
         integrity="sha384-Pqp51FUN2/qzfxZxBCtF0stpc9ONI6MYZpVqmo8m20SoaQCzf+arZvACkLkirlPz"
+        crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+
+<!-- pdf.js: a mesma versão e o mesmo hash do index.html -->
+<script type="module" src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/6.5.438/pdf.worker.min.mjs"
+        integrity="sha384-/+r9qqXFj/8aZJ0d2yiuf6sqAR9T1UyN6NdZoI8cMvzccicdUNx62wDS8JsPedce"
+        crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<script type="module" src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/6.5.438/pdf.min.mjs"
+        integrity="sha384-6MTG6VynDVMfHzijur0VKc9BdrA6HaXHZd+pK6iGWh2acDj3CibR0CRwHizMoy1N"
         crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 
 <link rel="stylesheet" href="../css/base.css">
@@ -54,9 +65,11 @@
 <!-- as funções do site, sem o js/app.js (que liga o menu e as telas) -->
 <script src="../js/leitura/formatos.js"></script>
 <script src="../js/leitura/planilha.js"></script>
+<script src="../js/leitura/pdf.js"></script>
 <script src="../js/empresas.js"></script>
 <script src="../js/bancos/itau.js"></script>
 <script src="../js/bancos/santander.js"></script>
+<script src="../js/bancos/bradesco.js"></script>
 <script src="../js/bancos/detecta.js"></script>
 <script src="../js/boleto.js"></script>
 <script src="../js/conferencias/dda.js"></script>
@@ -91,6 +104,62 @@ function excelFicticio(linhas, celulas){
   XLSX.utils.book_append_sheet(wb, aba, 'Planilha1');
   const bytes = XLSX.write(wb, { type:'array', bookType:'xlsx' });
   return new File([bytes], 'ficticio.xlsx');
+}
+
+// Monta um PDF fictício de 1 página (texto em Helvetica) e devolve como File.
+// textos = [{ top, x, texto }]: top e x em pontos, contando do canto de cima à esquerda,
+// como no PDF do banco. Só letras do Latin-1 (ç, á, é, ô...).
+function pdfFicticio(textos, nome){
+  const L = 623.63, A = 963.79, TAM = 8.29;
+  const escapa = t => t.replace(/[\\()]/g, c => '\\' + c);
+  const conteudo = textos.map(({ top, x, texto }) =>
+    `BT /F1 ${TAM} Tf 1 0 0 1 ${x.toFixed(2)} ${(A - top - TAM * 0.793).toFixed(2)} Tm (${escapa(texto)}) Tj ET`).join('\n');
+  const objetos = [
+    '<< /Type /Catalog /Pages 2 0 R >>',
+    '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
+    `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${L} ${A}] /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>`,
+    `<< /Length ${conteudo.length} >>\nstream\n${conteudo}\nendstream`,
+    '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>',
+  ];
+  let pdf = '%PDF-1.4\n';
+  const posicoes = objetos.map((o, i) => { const p = pdf.length; pdf += `${i + 1} 0 obj\n${o}\nendobj\n`; return p; });
+  const xref = pdf.length;
+  pdf += `xref\n0 ${objetos.length + 1}\n0000000000 65535 f \n` + posicoes.map(p => String(p).padStart(10, '0') + ' 00000 n \n').join('') +
+         `trailer\n<< /Size ${objetos.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`;
+  return new File([Uint8Array.from(pdf, c => c.charCodeAt(0))], nome || 'Bradesco_ficticio.pdf', { type:'application/pdf' });
+}
+
+// Textos de um DDA do Bradesco fictício, no layout do PDF do banco: topo (empresa, período),
+// cabeçalho da tabela, um bloco de 6 linhas por boleto e o rodapé "SAC".
+// opcoes: xBenef/xValor = onde começam as colunas do beneficiário e do valor (para simular
+// o PDF com colunas deslocadas); semStatus = índices dos boletos sem a linha "A PAGAR".
+function textosDdaBradesco(cnpjConta, boletos, opcoes){
+  const { xBenef = 362.9, xValor = 540.5, semStatus = [] } = opcoes || {};
+  const t = [
+    { top:43,    x:155.1, texto:'Boletos de Cobrança Registrados/DDA' },
+    { top:58,    x:155.1, texto:'EMPRESA FICTICIA S.A | 0' + cnpjConta },
+    { top:82.9,  x:155.1, texto:'Data da operação : 01/12/2026 - 09h00' },
+    { top:209.8, x:50.5,  texto:'Data de Vencimento:' },
+    { top:210,   x:137.8, texto:'20/11/2026 até 20/11/2026' },
+    { top:235.8, x:180.7, texto:'Pagador, CPF/CNPJ e' },
+    { top:239.5, x:40.3,  texto:'Data de Vencimento /' },
+    { top:241.2, x:xBenef - 7.5, texto:'Beneficiário, CPF/CNPJ e Banco Destinatário' },
+    { top:241.2, x:xValor, texto:'Valor' },
+    { top:246.6, x:180.7, texto:'Número de documento' },
+    { top:250.3, x:40.3,  texto:'Débito e Limite de Pagamento' },
+  ];
+  boletos.forEach((b, k) => {
+    const y = 273 + 48.2 * k;
+    t.push({ top:y, x:188.2, texto:b.pagador }, { top:y, x:xBenef, texto:b.benef },
+           { top:y + 7.5, x:40.3, texto:b.venc }, { top:y + 7.6, x:xValor, texto:'R$ ' + b.valor },
+           { top:y + 10.8, x:188.2, texto:b.pagadorCnpj }, { top:y + 10.8, x:xBenef, texto:b.cnpj },
+           { top:y + 18.3, x:40.3, texto:b.limite },
+           { top:y + 21.6, x:188.2, texto:b.doc }, { top:y + 21.6, x:xBenef, texto:b.banco });
+    if(!semStatus.includes(k)) t.push({ top:y + 29.2, x:40.3, texto:'A PAGAR' });
+  });
+  const fim = 273 + 48.2 * boletos.length + 20;
+  t.push({ top:fim, x:51.9, texto:'SAC - Serviço de Alô Bradesco' }, { top:fim + 34, x:47.8, texto:'Ouvidoria 0800 000 0000' });
+  return t;
 }
 
 // Desenha o placar e a lista (com textContent: o detalhe pode ter texto qualquer).
@@ -344,6 +413,140 @@ async function rodaTestes(){
     const td = area.querySelector('tbody td');
     confere('Nome com HTML aparece como texto (textContent), sem criar elemento', !area.querySelector('tbody img') && td.textContent.includes('<img'), td.textContent);
     confere('Clicar no cartão abre a aba do status', area.querySelector('.aba[aria-selected="true"]').dataset.status === 'banco', '');
+  });
+
+  // ---------- Bradesco: PDFs fictícios ----------
+  const rubiMatriz = EMPRESAS.find(e => e.id === 'rubi-matriz');
+  const rubiFilial = EMPRESAS.find(e => e.id === 'rubi-filial');
+  const pagadorRubi = { pagador:'EMPRESA FICTICIA S.A.', pagadorCnpj:'0' + rubiMatriz.cnpj };
+  const BOLETOS_PDF = [
+    { ...pagadorRubi, benef:'ALFA FICTICIA PECAS LTDA', cnpj:'011.111.111/0001-11', banco:'237 - BCO BRADESCO S.A.',
+      venc:'20/11/2026', limite:'20/12/2026', doc:'0005001', valor:'1.234,56' },
+    { ...pagadorRubi, benef:'XPTO FOMENTO MERCANTIL', cnpj:'022.222.222/0001-22', banco:'341 - ITAÚ UNIBANCO S.A.',
+      venc:'20/11/2026', limite:'20/11/2036', doc:'**********', valor:'300,00' },
+  ];
+  // lê um PDF fictício pelo mesmo caminho da tela: pdf.js -> leitorBradesco
+  const lePdfFicticio = async (textos, nome) => leitorBradesco(await lerPalavrasPdf(pdfFicticio(textos, nome)), nome);
+
+  await teste('Bradesco: leitura de PDF fictício', async () => {
+    const l = await lePdfFicticio(textosDdaBradesco(rubiMatriz.cnpj, BOLETOS_PDF), 'Bradesco_1.pdf');
+    confere('Leitura OK: 2 boletos, 2 valores "R$", sem erros', l.boletos.length === 2 && l.qtdRS === 2 && !l.erros.length, l.erros.join(' · ') || `${l.boletos.length} boletos`);
+    const [a, b] = l.boletos;
+    confere('Campos do 1º boleto: vencimento, limite, Nº Doc., beneficiário, CNPJ, banco, status e valor',
+      a.venc === '20/11/2026' && a.limite === '20/12/2026' && a.doc === '0005001' && a.beneficiario === 'ALFA FICTICIA PECAS LTDA' &&
+      a.cnpj === '011.111.111/0001-11' && a.banco === '237 - BCO BRADESCO S.A.' && a.status === 'A PAGAR' && a.valor === 1234.56,
+      `${a.venc} · ${a.limite} · ${a.doc} · ${a.beneficiario} · ${a.cnpj} · ${a.banco} · ${a.status} · ${a.valor}`);
+    confere('Nº Doc. só com asteriscos → sem documento (doc = null)', b.doc === null && b.docTexto === '**********', String(b.doc));
+    confere('Topo: empresa, período e total (soma dos boletos)', l.empresa && l.empresa.cnpj === '0' + rubiMatriz.cnpj &&
+      l.periodo.join(' a ') === '20/11/2026 a 20/11/2026' && l.total === 1534.56, `${l.empresa && l.empresa.cnpj} · ${l.periodo} · ${brl(l.total)}`);
+    const av = avaliaPdfBradesco(l, rubiMatriz, []);
+    confere('Pagador e conta = Rubi Matriz escolhida → ok', av.situacao === 'ok', av.erros.join(' · ') || av.situacao);
+  });
+
+  await teste('Bradesco: contagem de "R$" diferente bloqueia', async () => {
+    const l = await lePdfFicticio(textosDdaBradesco(rubiMatriz.cnpj, BOLETOS_PDF, { semStatus:[0] }), 'Bradesco_2.pdf');
+    confere('Boleto sem a linha do status: 2 valores "R$", mas 1 boleto lido → erro', l.qtdRS === 2 && l.boletos.length === 1 &&
+      l.erros.some(e => e.includes('2 valores (R$) no PDF, mas 1 boletos lidos')), l.erros.join(' · '));
+    const av = avaliaPdfBradesco(l, rubiMatriz, []);
+    confere('Esse PDF fica com Erro (não libera o passo 2)', av.situacao === 'erro', av.situacao);
+  });
+
+  await teste('Bradesco: PDF repetido é ignorado', async () => {
+    const arquivo = pdfFicticio(textosDdaBradesco(rubiMatriz.cnpj, BOLETOS_PDF), 'Bradesco_3.pdf');
+    const enviados = [];
+    for(const nome of ['Bradesco_3.pdf', 'Bradesco_3 (1).pdf']){
+      const leitura = leitorBradesco(await lerPalavrasPdf(arquivo), nome);
+      enviados.push({ leitura, ...avaliaPdfBradesco(leitura, rubiMatriz, enviados) });
+    }
+    confere('O mesmo PDF enviado 2 vezes → o 2º fica "repetido", com o nome do 1º',
+      enviados[0].situacao === 'ok' && enviados[1].situacao === 'repetido' && enviados[1].repetidoDe === 'Bradesco_3.pdf', enviados.map(e => e.situacao).join(', '));
+    const { boletos } = boletosDosPdfsBradesco(enviados.filter(e => e.situacao === 'ok').map(e => e.leitura));
+    confere('Os boletos entram uma vez só (2, não 4)', boletos.length === 2, `${boletos.length} boletos`);
+  });
+
+  await teste('Bradesco: outra empresa e colunas deslocadas', async () => {
+    const l = await lePdfFicticio(textosDdaBradesco(rubiMatriz.cnpj, BOLETOS_PDF), 'Bradesco_4.pdf');
+    const av = avaliaPdfBradesco(l, rubiFilial, []);
+    confere('PDF da Rubi Matriz com Rubi Filial escolhida → erro (conta e pagador)', av.situacao === 'erro' && av.erros.some(e => /conta da Rubi Matriz/.test(e)) &&
+      av.erros.some(e => /outro pagador/.test(e)), av.erros.join(' · '));
+    const d = await lePdfFicticio(textosDdaBradesco(rubiMatriz.cnpj, BOLETOS_PDF, { xBenef:349.5, xValor:524.5 }), 'Bradesco_5.pdf');
+    confere('Colunas 13 pt mais à esquerda (como num PDF real): pagador, beneficiário e CNPJ continuam certos',
+      !d.erros.length && d.boletos[0].beneficiario === 'ALFA FICTICIA PECAS LTDA' && d.boletos[0].cnpj === '011.111.111/0001-11' && d.boletos[0].pagador === 'EMPRESA FICTICIA S.A.',
+      d.erros.join(' · ') || `${d.boletos[0].pagador} | ${d.boletos[0].beneficiario}`);
+  });
+
+  await teste('Bradesco: boletos de vários PDFs', () => {
+    const bol = (doc, valor) => ({ cnpj:'011.111.111/0001-11', doc, valor, venc:'20/11/2026' });
+    const { boletos, repetidos } = boletosDosPdfsBradesco([
+      { boletos:[bol('1', 10), bol('1', 10), bol(null, 20)] },
+      { boletos:[bol('1', 10), bol(null, 20), bol('2', 30)] },
+    ]);
+    confere('Mesmo boleto (CNPJ, Nº Doc., valor, vencimento) em outro PDF entra 1 vez; no mesmo PDF ou sem Nº Doc. continua',
+      boletos.length === 5 && repetidos === 1, `${boletos.length} boletos, ${repetidos} descartado`);
+  });
+
+  // ---------- Bradesco: conferência (nomes e valores fictícios) ----------
+  await teste('Bradesco: semelhança de nomes igual ao Python', () => {
+    const casos = [['ALFA FICTICIA PECAS', 'ALFA FICTICIA PECAS LTDA', 0.8837209302325582], ['GAMA MOVEIS FICTICIOS', 'XPTO FOMENTO MERCANTIL', 0.32558139534883723],
+                   ['ABCD', 'BCDA', 0.75], ['LOJA DO ZE', 'LOJA ZE', 0.8235294117647058], ['PRIMEIRA COISA', 'COISA PRIMEIRA', 0.5714285714285714],
+                   ['A'.repeat(250) + 'B', 'B' + 'A'.repeat(250), 0.00398406374501992]];
+    casos.forEach(([a, b, esperado]) => {
+      const r = semelhancaSequencia(a, b);
+      confere(`"${a.slice(0, 22)}" × "${b.slice(0, 22)}" = ${esperado.toFixed(4)} (difflib.SequenceMatcher)`, Math.abs(r - esperado) < 1e-12, String(r));
+    });
+  });
+
+  const RELATORIO_RUBI = [
+    ['1 RUBIATABA INDUSTRIAL S A      Empresa(s): 1 /   Data/Hora : 01/12/26 09:00:00'],
+    ['Duplicatas em Aberto'], ['Periodo 20/11/26 a 20/11/26'], [],
+    ['Vencimento', 'Código', 'Nome', 'Título', 'Desdobramento', 'Último Desdobramento', 'Prefixo', 'Saldo'],
+    [],
+    ...[['ALFA FICTICIA PECAS', 100], ['BETA FICTICIA TINTAS', 200], ['GAMA FICTICIA MOVEIS', 300], ['ZETA FICTICIA LONAS', 500], ['EPSILON FICTICIA VIDROS', 600.01]]
+      .map(([nome, saldo], i) => [new Date(2026, 10, 20), 9001 + i, nome, String(5001 + i) + '   ', 'A  ', 'A  ', 'NF55', saldo]),
+    ['Despesas', 0],
+  ];
+  const BOLETOS_CONF = [
+    { beneficiario:'ALFA FICTICIA PECAS LTDA',  venc:'20/11/2026', valor:100,  doc:'0005001', cnpj:'011.111.111/0001-11', banco:'237 - BCO BRADESCO S.A.' },  // Conferidos
+    { beneficiario:'BETA FICTICIA TINTAS',      venc:'21/11/2026', valor:200,  doc:'5002',    cnpj:'', banco:'' },   // Datas divergentes
+    { beneficiario:'XPTO FOMENTO MERCANTIL',    venc:'20/11/2026', valor:300,  doc:null,      cnpj:'', banco:'' },   // Nome divergente, factoring, sem Nº Doc.
+    { beneficiario:'DELTA FICTICIA CABOS',      venc:'20/11/2026', valor:400,  doc:'7',       cnpj:'', banco:'' },   // Só no banco
+    { beneficiario:'EPSILON FICTICIA VIDROS',   venc:'20/11/2026', valor:600,  doc:'5005',    cnpj:'', banco:'' },   // 1 centavo diferente: não casa
+    { beneficiario:'OMEGA FICTICIA',            venc:'30/11/2026', valor:50,   doc:'9',       cnpj:'', banco:'' },   // fora das datas do relatório
+  ];
+
+  await teste('Bradesco: conferência, um de cada status', () => {
+    const { titulos, erro } = extraiSistemaBradesco(RELATORIO_RUBI);
+    confere('Relatório Rubi: 5 títulos pelos nomes das colunas (a linha "Despesas" fica de fora), NF sem espaços',
+      !erro && titulos.length === 5 && titulos[0].venc === '20/11/2026' && titulos[0].codigo === 9001 && titulos[0].doc === '5001' && titulos[4].valor === 600.01,
+      erro || titulos.map(t => `${t.nome} ${t.doc} ${t.valor}`).join(' · '));
+    confere('Relatório Rubi Matriz: liberado com Rubi Matriz, bloqueado com Rubi Filial',
+      checaRelatorioDda(rubiMatriz, RELATORIO_RUBI) === '' && /é da Rubi Matriz/.test(checaRelatorioDda(rubiFilial, RELATORIO_RUBI)), checaRelatorioDda(rubiFilial, RELATORIO_RUBI));
+    const r = conferirBradesco(BOLETOS_CONF, titulos);
+    const l = linhasDda(r);
+    const nomes = id => l[id].map(x => (x.banco || x.sistema).nome).join(', ');
+    confere('Conferidos: ALFA (valor, nome parecido e vencimento)', l.ok.length === 1 && /ALFA/.test(nomes('ok')), nomes('ok'));
+    confere('Datas divergentes: BETA (21/11 no banco × 20/11 no sistema)', l.data.length === 1 && /BETA/.test(nomes('data')), nomes('data'));
+    confere('Nome divergente: XPTO FOMENTO × GAMA (só valor e vencimento)', l.nome.length === 1 && l.nome[0].sistema.nome === 'GAMA FICTICIA MOVEIS', nomes('nome'));
+    confere('Só no banco: DELTA e EPSILON (R$ 600,00 × R$ 600,01: no Bradesco o valor tem que bater ao centavo)',
+      l.banco.length === 2 && /DELTA/.test(nomes('banco')) && /EPSILON/.test(nomes('banco')), nomes('banco'));
+    confere('Só no sistema: ZETA e EPSILON', l.sis.length === 2 && /ZETA/.test(nomes('sis')) && /EPSILON/.test(nomes('sis')), nomes('sis'));
+    confere('Boleto que vence fora das datas do relatório (OMEGA, 30/11) fica separado para o aviso', r.foraDoPeriodo.length === 1 && r.foraDoPeriodo[0].beneficiario === 'OMEGA FICTICIA', '');
+    const avisos = avisosBoletoBradesco(l.nome[0].banco, l.nome[0].sistema).map(a => a.tipo).join(',');
+    confere('Avisos do XPTO: cedido a factoring e sem Nº Doc.', avisos === 'factoring,semDoc', avisos);
+    confere('ALFA não tem aviso', avisosBoletoBradesco(l.ok[0].banco, l.ok[0].sistema).length === 0, '');
+  });
+
+  await teste('Bradesco: Excel', async () => {
+    const r = conferirBradesco(BOLETOS_CONF, extraiSistemaBradesco(RELATORIO_RUBI).titulos);
+    const abas = abasExcelBradesco(r);
+    confere('5 abas com os mesmos nomes e a mesma ordem da tela', abas.map(a => a.nome).join('|') === STATUS_DDA.map(s => s.nome).join('|'), abas.map(a => a.nome).join(' · '));
+    const nome = abas.find(a => a.status === 'nome');
+    confere('Nome divergente traz NF do sistema, Nº Doc. do Bradesco (vazio) e os avisos', nome.linhas[0][3] === '5003' && nome.linhas[0][4] === '' &&
+      /factoring/.test(nome.linhas[0][7]) && /sem Nº Doc/.test(nome.linhas[0][7]), nome.linhas[0].join(' | '));
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(await montaExcel(abas));
+    const nf = wb.getWorksheet('Conferidos').getRow(3).getCell(4);
+    confere('Excel abre, 5 abas, NF gravada como texto', wb.worksheets.length === 5 && nf.value === '5001' && nf.numFmt === '@', `${nf.value} (${nf.numFmt})`);
   });
 
   mostraResultados();

@@ -50,7 +50,19 @@
 .caixa-envio.recusado{border-style:solid;border-color:var(--alerta-texto);background:var(--alerta-fundo)}
 .caixa-envio.recusado .caixa-envio-arquivo{color:var(--alerta-texto)}
 
-/* linha de informação acima do resultado (Itaú: consulta, unidades) */
+/* ---------- Passos (Bradesco: 1º os PDFs, 2º o relatório) ---------- */
+.passos{display:grid;gap:var(--esp-5)}
+.passo-titulo{display:flex;align-items:center;gap:var(--esp-2);font-weight:600;margin-bottom:var(--esp-3)}
+.passo-numero{
+  display:inline-grid;place-items:center;width:24px;height:24px;border-radius:50%;
+  background:var(--destaque);color:#fff;font-family:var(--fonte-numeros);font-size:13px;
+}
+/* lista dos PDFs lidos no passo 1 (arquivo, boletos, total, ok/erro) */
+.leitura-pdfs{margin-top:var(--esp-3);border-top:1px solid var(--borda);border-radius:var(--raio)}
+.leitura-pdfs .tabela td{padding:8px var(--esp-3)}
+#ddaLeituraResumo{margin-top:var(--esp-3)}
+
+/* linha de informação acima do resultado (Itaú: consulta, unidades; Bradesco: PDFs e boletos) */
 .info-resultado{margin:var(--esp-5) 0 var(--esp-3);font-size:13px;color:var(--texto-fraco)}
 #ddaResultado:not([hidden]){margin-top:var(--esp-5)}
 
