@@ -8,7 +8,8 @@
    de barras vem SEMPRE do texto da célula (no antigo, nesta tela, vinha do
    número e podia perder dígitos). Ele só aparece na tela e no Excel; não
    entra na conta da conferência.
-   Também tem o filtro por unidade do pagador e a data/hora da consulta.
+   Também tem o filtro por unidade do pagador, a data/hora da consulta e o
+   reconhecimento do PDF "Boletos Recebidos (DDA)" (tela DDA → .RET).
    Precisa de js/leitura/formatos.js e js/leitura/planilha.js.
    ===================================================================== */
 
@@ -102,4 +103,24 @@ const NOMES_UNIDADE = { 'sem-capinopolis':'CRV Industrial (sem Capinópolis)', c
 // Unidade de um boleto pelo texto do Pagador: 'capinopolis' ou 'sem-capinopolis'.
 function unidadeDoPagador(p){
   return normaliza(p).replace(/\s+/g,'').includes('CAPINOPOLIS') ? 'capinopolis' : 'sem-capinopolis';
+}
+
+/* ---------------------------------------------------------------------
+   PDF "Boletos Recebidos (DDA)" do Itaú
+   O PDF não traz o CNPJ da conta: a empresa vem do seletor da tela.
+   No topo da página 1: "Emitido em 19/11/2026 às 16:00:37 via Internet -
+   311 boleto(s) recebidos". A leitura dos boletos (colunas pela posição)
+   vem com a tela DDA → .RET.
+   --------------------------------------------------------------------- */
+
+// Reconhece o PDF do DDA do Itaú pelas palavras da página 1 (de lerPalavrasPdf).
+// Devolve { total, emitido } (total = quantos boletos o próprio PDF diz ter) ou { erro }.
+function reconhecePdfItau(leituraPdf){
+  const texto = normaliza(leituraPdf.palavras.filter(p => p.pagina === 0).map(p => p.texto).join(' '));
+  if(!texto.includes('BOLETOS RECEBIDOS (DDA)'))
+    return { erro:'Não reconheci o PDF: falta o título "Boletos Recebidos (DDA)" do Itaú na 1ª página.' };
+  const qtd = texto.match(/(\d+)\s*BOLETO\(S\)\s*RECEBIDOS/);
+  if(!qtd) return { erro:'Não achei no topo do PDF quantos boletos ele tem ("NNN boleto(s) recebidos").' };
+  const emitido = texto.match(/EMITIDO EM (\d{2}\/\d{2}\/\d{4})(?: AS (\d{2}:\d{2}:\d{2}))?/);
+  return { total: Number(qtd[1]), emitido: emitido ? emitido[1] + (emitido[2] ? ' às ' + emitido[2] : '') : '' };
 }

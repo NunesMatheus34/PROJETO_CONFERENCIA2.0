@@ -4,7 +4,8 @@
      Menu lateral à esquerda, montado pela lista MENU do js/app.js; cada tela
      é uma <section> que o menu mostra e esconde pelo #endereço.
      Planilhas são lidas só no navegador.
-     Telas prontas: Conferência DDA (Santander, Itaú e Bradesco), Código de barras e Conferência de boletos.
+     Telas prontas: Conferência DDA (Santander, Itaú e Bradesco), Código de barras e Conferência de boletos;
+     DDA → .RET em construção (entradas prontas).
      As outras chegam nas próximas etapas.
      ===================================================================== -->
 <html lang="pt-BR">
@@ -333,9 +334,39 @@
       <header class="tela-cabecalho">
         <p class="sobretitulo">Arquivo de retorno</p>
         <h1 id="titulo-dda-ret">DDA → .RET</h1>
-        <p class="tela-descricao">Monta o arquivo .RET a partir do DDA, sem alterar nenhum dado.</p>
+        <p class="tela-descricao">Monta o arquivo .RET a partir do DDA do Itaú, sem alterar nenhum dado: só copia o que veio do banco, confere e bloqueia o que não fechar.</p>
       </header>
-      <p class="mensagem mensagem-aviso">! Esta tela chega numa próxima etapa.</p>
+      <div class="bloco">
+        <!-- 1º a empresa (só as que têm Itaú): sem ela, as caixas de arquivo ficam travadas -->
+        <div class="escolhas">
+          <label class="campo">
+            <span class="campo-rotulo">Empresa pagadora</span>
+            <select id="retEmpresa"></select>
+          </label>
+        </div>
+        <div class="envios">
+          <label class="caixa-envio travada" id="retCaixaModelo">
+            <input type="file" class="caixa-envio-input" accept=".ret,.RET" disabled>
+            <svg class="ico" aria-hidden="true"><use href="#i-arquivo"/></svg>
+            <span class="caixa-envio-titulo">Modelo .RET</span>
+            <span class="caixa-envio-dica">O último .RET de DDA que o Itaú mandou. Dele só são copiados o header de arquivo e o header de lote; nada fica guardado.</span>
+            <span class="caixa-envio-arquivo">Escolha a empresa primeiro</span>
+          </label>
+          <label class="caixa-envio travada" id="retCaixaDda">
+            <input type="file" class="caixa-envio-input" accept=".xlsx,.xls,.pdf" disabled>
+            <svg class="ico" aria-hidden="true"><use href="#i-arquivo"/></svg>
+            <span class="caixa-envio-titulo">DDA do Itaú</span>
+            <span class="caixa-envio-dica">Excel "Boletos Recebidos" ou PDF "Boletos Recebidos (DDA)" do internet banking.</span>
+            <span class="caixa-envio-arquivo">Escolha a empresa primeiro</span>
+          </label>
+        </div>
+        <div class="acoes">
+          <button type="button" class="botao" id="retNova">Recomeçar</button>
+        </div>
+      </div>
+      <!-- checagens das entradas: modelo, empresa no modelo e DDA (js/telas/dda-ret.js) -->
+      <div class="checagens" id="retChecagens" aria-live="polite"></div>
+      <div class="mensagem mensagem-ok" id="retPronto" role="status" hidden></div>
     </section>
 
     <!-- ===================== AJUDA ===================== -->
@@ -438,6 +469,7 @@
 <script src="js/leitura/caixa-envio.js"></script>
 <script src="js/leitura/mensagens.js"></script>
 <script src="js/leitura/pdf.js"></script>
+<script src="js/leitura/ret.js"></script>
 <script src="js/empresas.js"></script>
 <script src="js/bancos/itau.js"></script>
 <script src="js/bancos/santander.js"></script>
@@ -449,12 +481,14 @@
 <script src="js/conferencias/codigo-barras.js"></script>
 <script src="js/conferencias/relatorio-contra-relatorio.js"></script>
 <script src="js/conferencias/boletos.js"></script>
+<script src="js/conferencias/dda-ret.js"></script>
 <script src="js/excel.js"></script>
 <script src="js/telas/resultado.js"></script>
 <script src="js/telas/dda-bradesco.js"></script>
 <script src="js/telas/conferencia-dda.js"></script>
 <script src="js/telas/codigo-barras.js"></script>
 <script src="js/telas/boletos.js"></script>
+<script src="js/telas/dda-ret.js"></script>
 <script src="js/app.js"></script>
 </body>
 </html>

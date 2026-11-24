@@ -25,7 +25,9 @@
      Conferência de boletos (os testes do projeto antigo: agrupado, agrupado
      grande, só valor, NF de 2 dígitos, cedido, não fecha, NF com 1 dígito
      diferente, código do sistema, folha, 2 vencimentos, Excel lido de volta;
-     e, novos, a empresa pelo seletor com as travas e a tela).
+     e, novos, a empresa pelo seletor com as travas e a tela) e as entradas
+     do DDA → .RET (modelo .RET fictício, empresa fora do modelo, Excel de outra
+     conta, PDF do Itaú e PDF de outro tipo).
      ===================================================================== -->
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Testes da Conferência</title>
@@ -78,6 +80,7 @@
 <script src="../js/leitura/formatos.js"></script>
 <script src="../js/leitura/planilha.js"></script>
 <script src="../js/leitura/pdf.js"></script>
+<script src="../js/leitura/ret.js"></script>
 <script src="../js/empresas.js"></script>
 <script src="../js/bancos/itau.js"></script>
 <script src="../js/bancos/santander.js"></script>
@@ -89,6 +92,7 @@
 <script src="../js/conferencias/codigo-barras.js"></script>
 <script src="../js/conferencias/relatorio-contra-relatorio.js"></script>
 <script src="../js/conferencias/boletos.js"></script>
+<script src="../js/conferencias/dda-ret.js"></script>
 <script src="../js/excel.js"></script>
 <script src="../js/telas/resultado.js"></script>
 <!-- só para as colunas da tabela (o destaque vermelho); a tela não é ligada aqui -->
@@ -1098,6 +1102,81 @@ async function rodaTestes(){
     confere('Linha digitável com banco, valor e vencimento lidos do código e o botão Copiar',
       botao && botao.dataset.linha === linha && /Banco 341 · R\$\s?100,00 · venc\. 20\/11\/2026/.test(comLinha.textContent) && !comLinha.querySelector('input'),
       comLinha.querySelector('.cod-bol').textContent);
+  });
+
+  // ---------- DDA → .RET: entradas (modelo .RET, empresa no modelo, DDA) — tudo FICTÍCIO ----------
+  // Linha CNAB 240 fictícia: espaços, com os campos dados em { posição inicial (de 1): texto }.
+  const linhaCnabFicticia = campos => {
+    const l = new Array(240).fill(' ');
+    Object.entries(campos).forEach(([pos, txt]) => [...txt].forEach((c, i) => { l[Number(pos) - 1 + i] = c; }));
+    return l.join('');
+  };
+  const cnpj15 = e => apenasDigitos(e.cnpj).padStart(15, '0');
+  // modelo .RET fictício: header de arquivo, um lote por empresa (com 1 boleto G fictício), trailers
+  const modeloRetFicticio = (empresas, opcoes = {}) => {
+    const linhas = [linhaCnabFicticia({ 1: opcoes.banco || '341', 4: '0000', 8: '0', 73: 'EMPRESA FICTICIA', 144: '19112026', 152: '160000', 158: '000123' })];
+    empresas.forEach((e, i) => {
+      const lote = String(i + 1).padStart(4, '0');
+      linhas.push(linhaCnabFicticia({ 1: '341', 4: lote, 8: '1', 18: '2', 19: cnpj15(e), 74: opcoes.nomeLote || 'EMPRESA FICTICIA' }));
+      if(!opcoes.semG) linhas.push(linhaCnabFicticia({ 1: '341', 4: lote, 8: '3', 9: '00001', 14: 'G', 18: COD_ALFA }));
+      linhas.push(linhaCnabFicticia({ 1: '341', 4: lote, 8: '5' }));
+    });
+    linhas.push(linhaCnabFicticia({ 1: '341', 4: '9999', 8: '9' }));
+    return Uint8Array.from(linhas.join('\r\n') + '\r\n', c => c.charCodeAt(0) & 0xFF);
+  };
+  const textoParaBytes = t => Uint8Array.from(t, c => c.charCodeAt(0) & 0xFF);
+
+  await teste('DDA → .RET: modelo .RET', () => {
+    const ok = leModeloRet(modeloRetFicticio([crvMatriz, crvFilial]));
+    confere('Modelo com os lotes da matriz e da filial → aceito, com os 2 CNPJs, data e NSA',
+      !ok.erro && ok.lotes.map(l => cnpjDoRetFormatado(l.cnpj)).join(',') === '03.937.452/0001-92,03.937.452/0004-35' &&
+      ok.data === '19/11/2026' && ok.hora === '16:00:00' && ok.nsa === '000123' && ok.qtdBoletos === 2 && ok.headerArquivo.length === 240,
+      ok.erro || `${ok.lotes.length} lotes, ${ok.data}, NSA ${ok.nsa}`);
+    const curta = textoParaBytes(new TextDecoder('latin1').decode(modeloRetFicticio([crvFilial])).replace(/^(.{239}) /, '$1'));
+    const rCurta = leModeloRet(curta);
+    confere('Linha com 239 caracteres → recusado', /linha 1 tem 239/.test(rCurta.erro), rCurta.erro);
+    const rBanco = leModeloRet(modeloRetFicticio([crvFilial], { banco:'237' }));
+    confere('Header de arquivo de outro banco → recusado', /não é um \.RET do Itaú/i.test(rBanco.erro), rBanco.erro);
+    const rSemG = leModeloRet(modeloRetFicticio([crvFilial], { semG:true }));
+    confere('.RET sem nenhum segmento G (não é de DDA) → recusado', /segmento G/.test(rSemG.erro), rSemG.erro);
+    const rAcento = leModeloRet(modeloRetFicticio([crvFilial], { nomeLote:'EMPRESA FICTÍCIA' }));
+    confere('Header de lote com acento → recusado', /caractere fora do padrão/.test(rAcento.erro), rAcento.erro);
+    const rVazio = leModeloRet(new Uint8Array(0));
+    confere('Arquivo vazio → recusado', /vazio/.test(rVazio.erro), rVazio.erro);
+  });
+
+  await teste('DDA → .RET: empresa e DDA', async () => {
+    confere('Seletor só com CRV Matriz e CRV Filial', empresasRet().map(e => e.id).join(',') === 'crv-matriz,crv-filial', empresasRet().map(e => e.nome).join(' · '));
+    const soMatriz = leModeloRet(modeloRetFicticio([crvMatriz]));
+    const fora = loteDaEmpresa(soMatriz, crvFilial);
+    confere('Modelo só com a matriz e CRV Filial escolhida → bloqueado', !fora.lote && /não tem lote da CRV Filial/.test(fora.bloqueio), fora.bloqueio);
+    const dentro = loteDaEmpresa(soMatriz, crvMatriz);
+    confere('… e com CRV Matriz escolhida → usa o header de lote da matriz', dentro.lote && dentro.lote.linha.slice(18, 33) === '003937452000192', dentro.bloqueio || 'ok');
+
+    const lDdaFilial = await lerMatrizComTexto(excelFicticio(ddaItauBol(crvFilial)));
+    const excelOutra = checaDdaRet(crvMatriz, { tipo:'excel', ...lDdaFilial });
+    confere('Excel do Itaú da conta da filial com CRV Matriz escolhida → bloqueado', /CRV Filial/.test(excelOutra.bloqueio), excelOutra.bloqueio);
+    const semCnpj = await lerMatrizComTexto(excelFicticio(ddaItauBol(crvFilial).filter(l => !/^CPF\/CNPJ/.test(l[0])).map(l => l.map(c => /^\d{2}\.\d{3}/.test(c) ? '' : c))));
+    const rSemCnpj = checaDdaRet(crvFilial, { tipo:'excel', ...semCnpj });
+    confere('Excel do Itaú sem o CNPJ da conta no topo → bloqueado (no .RET não é só aviso)', /Não achei o CNPJ da conta/.test(rSemCnpj.bloqueio), rSemCnpj.bloqueio);
+    const excelCerto = checaDdaRet(crvFilial, { tipo:'excel', ...lDdaFilial });
+    confere('Excel do Itaú da conta certa → liberado', !excelCerto.bloqueio && !excelCerto.aviso, excelCerto.descricao);
+
+    const pdfItau = await lerPalavrasPdf(pdfFicticio([
+      { top: 20, x: 30, texto: 'Boletos Recebidos (DDA)' },
+      { top: 35, x: 30, texto: 'Emitido em 19/11/2026 às 16:00:37 via Internet - 3 boleto(s) recebidos' },
+    ], 'dda_itau_ficticio.pdf'));
+    const pdfOk = checaDdaRet(crvFilial, { tipo:'pdf', pdf: pdfItau });
+    confere('PDF "Boletos Recebidos (DDA)" → liberado, com 3 boletos e o aviso da empresa pelo seletor',
+      !pdfOk.bloqueio && /3 boleto\(s\)/.test(pdfOk.descricao) && /19\/11\/2026 às 16:00:37/.test(pdfOk.descricao) && /CRV Filial/.test(pdfOk.aviso), pdfOk.descricao);
+    const pdfOutro = await lerPalavrasPdf(pdfFicticio([{ top: 20, x: 30, texto: 'Extrato de conta corrente' }], 'outro.pdf'));
+    const rOutro = checaDdaRet(crvFilial, { tipo:'pdf', pdf: pdfOutro });
+    confere('PDF que não é o DDA do Itaú → bloqueado', /Boletos Recebidos \(DDA\)/.test(rOutro.bloqueio), rOutro.bloqueio);
+
+    const todos = checagensEntradasRet({ empresa: crvFilial, modelo: leModeloRet(modeloRetFicticio([crvMatriz, crvFilial])), dda: { tipo:'pdf', pdf: pdfItau } });
+    confere('Modelo, empresa e PDF certos → pronto (com o aviso da empresa)', todos.pronto && todos.lista.map(c => c.tipo).join(',') === 'ok,ok,ok,aviso', todos.lista.map(c => c.titulo).join(' · '));
+    const travado = checagensEntradasRet({ empresa: crvFilial, modelo: soMatriz, dda: { tipo:'pdf', pdf: pdfItau } });
+    confere('Empresa fora do modelo → não fica pronto', !travado.pronto, travado.lista.map(c => c.titulo).join(' · '));
   });
 
   mostraResultados();

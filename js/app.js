@@ -274,6 +274,7 @@ function iniciaApp(){
   iniciaTelaDda();
   iniciaTelaCodigoBarras();
   iniciaTelaBoletos();
+  iniciaTelaRet();
 
   sincronizaTela();
 }
