@@ -20,9 +20,12 @@ function qtdTitulos(n){ return n === 1 ? '1 título' : `${n} títulos`; }
 // Liga um resultado a uma área da tela e devolve { mostra(linhasPorStatus), limpa() }.
 // opcoes = {
 //   area:    elemento onde ficam cartões, abas, busca e tabela,
-//   status:  [{ id, nome, cor, ajuda }] na ordem das abas,
+//   status:  [{ id, nome, cor, ajuda, semTotal }] na ordem das abas
+//            (semTotal: o cartão e o rodapé mostram só a quantidade, sem somar valor),
 //   colunas: [{ cab, classe, celula(linha) -> texto | elemento }],
-//   soma(linhas) -> número, busca(linha, texto) -> bool, vazio: { status: texto }
+//   soma(linhas) -> número, busca(linha, texto) -> bool, vazio: { status: texto },
+//   classeLinha(linha) -> classe da <tr> (opcional, ex.: destaque vermelho),
+//   qtd(n, status) -> rótulo da quantidade no rodapé (opcional; padrão "N títulos")
 // }
 function ligaResultado(opcoes){
   const { area, status, soma, busca } = opcoes;
@@ -48,14 +51,14 @@ function ligaResultado(opcoes){
   // troca a aba visível (pelo cartão ou pela aba)
   function escolhe(id){ abaAtiva = id; desenhaAbas(); desenhaTabela(); }
 
-  // cartões: um por status, com quantidade e total; clicar abre a aba
+  // cartões: um por status, com quantidade e total (só quantidade se semTotal); clicar abre a aba
   function desenhaCartoes(){
     cartoes.replaceChildren(...status.map(st => {
       const linhas = linhasPorStatus[st.id];
       const c = cria('button', 'cartao st-' + st.cor);
       c.type = 'button'; c.title = st.ajuda || ''; c.dataset.status = st.id;
-      c.append(cria('span', 'cartao-nome', st.nome), cria('span', 'cartao-qtd', String(linhas.length)),
-               cria('span', 'cartao-total', brl(soma(linhas))));
+      c.append(cria('span', 'cartao-nome', st.nome), cria('span', 'cartao-qtd', String(linhas.length)));
+      if(!st.semTotal) c.append(cria('span', 'cartao-total', brl(soma(linhas))));
       c.addEventListener('click', () => escolhe(st.id));
       return c;
     }));
@@ -83,7 +86,7 @@ function ligaResultado(opcoes){
     thead.replaceChildren(tr);
 
     tbody.replaceChildren(...(visiveis.length ? visiveis.map(l => {
-      const linha = cria('tr');
+      const linha = cria('tr', opcoes.classeLinha ? opcoes.classeLinha(l) : '');
       opcoes.colunas.forEach(c => {
         const td = cria('td', c.classe || '');
         const conteudo = c.celula(l);
@@ -100,9 +103,16 @@ function ligaResultado(opcoes){
     })()]));
 
     const rodape = cria('tr');
-    const rot = cria('td', '', `Total · ${qtdTitulos(visiveis.length)}`);
-    rot.colSpan = opcoes.colunas.length - 1;
-    rodape.append(rot, cria('td', 'num', brl(soma(visiveis))));
+    const rotulo = (opcoes.qtd || qtdTitulos)(visiveis.length, st);
+    if(st.semTotal){
+      const rot = cria('td', '', rotulo);
+      rot.colSpan = opcoes.colunas.length;
+      rodape.append(rot);
+    }else{
+      const rot = cria('td', '', `Total · ${rotulo}`);
+      rot.colSpan = opcoes.colunas.length - 1;
+      rodape.append(rot, cria('td', 'num', brl(soma(visiveis))));
+    }
     tfoot.replaceChildren(rodape);
   }
 

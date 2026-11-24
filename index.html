@@ -3,7 +3,7 @@
      CONFERÊNCIA DDA 2.0 — página única
      Menu lateral à esquerda; cada tela é uma <section> que o menu mostra e
      esconde pelo #endereço (js/app.js). Planilhas são lidas só no navegador.
-     Telas prontas: Conferência DDA (Santander, Itaú e Bradesco). As outras chegam nas próximas etapas.
+     Telas prontas: Conferência DDA (Santander, Itaú e Bradesco) e Código de barras. As outras chegam nas próximas etapas.
      ===================================================================== -->
 <html lang="pt-BR">
 <head>
@@ -180,9 +180,85 @@
       <header class="tela-cabecalho">
         <p class="sobretitulo">Relatório do sistema</p>
         <h1 id="titulo-codigo-barras">Código de barras</h1>
-        <p class="tela-descricao">Confere o código de barras lançado no sistema contra o saldo de cada título.</p>
+        <p class="tela-descricao">Confere o código de barras lançado no sistema e procura títulos lançados em duas empresas.</p>
       </header>
-      <p class="mensagem mensagem-aviso">! Esta tela chega numa próxima etapa.</p>
+      <!-- as duas conferências desta tela (js/telas/codigo-barras.js troca uma pela outra) -->
+      <div class="abas abas-tela" role="tablist" aria-label="Conferências do código de barras">
+        <button type="button" class="aba" role="tab" id="cbModoUmAba" aria-controls="cbModoUm" aria-selected="true">Um relatório</button>
+        <button type="button" class="aba" role="tab" id="cbModoDoisAba" aria-controls="cbModoDois" aria-selected="false">Relatório contra relatório</button>
+      </div>
+
+      <!-- A) Um relatório: valor do código × saldo e códigos repetidos -->
+      <div id="cbModoUm" role="tabpanel" aria-labelledby="cbModoUmAba">
+        <div class="bloco">
+          <p class="bloco-intro">O valor gravado no código de barras bate com o saldo lançado? Algum código foi lançado em mais de um título?</p>
+          <div class="envios">
+            <label class="caixa-envio" id="cbCaixa">
+              <input type="file" class="caixa-envio-input" accept=".xlsx,.xls">
+              <svg class="ico" aria-hidden="true"><use href="#i-arquivo"/></svg>
+              <span class="caixa-envio-titulo">Relatório do sistema com código de barras</span>
+              <span class="caixa-envio-dica">Excel "Vencimento / Cód. Barras" (com as colunas Código de barras e Saldo). Arraste o arquivo aqui ou clique para escolher.</span>
+              <span class="caixa-envio-arquivo">Nenhum arquivo escolhido</span>
+            </label>
+          </div>
+          <div class="acoes">
+            <button type="button" class="botao botao-principal" id="cbConferir" disabled>Conferir</button>
+            <button type="button" class="botao" id="cbBaixar" disabled>Baixar Excel</button>
+            <button type="button" class="botao" id="cbNova">Nova conferência</button>
+          </div>
+        </div>
+        <div class="mensagem mensagem-alerta mensagem-grande" id="cbAlerta" role="alert" hidden></div>
+        <div class="mensagem mensagem-aviso" id="cbAviso" role="status" hidden></div>
+        <div id="cbResultado" hidden>
+          <p class="info-resultado mono" id="cbInfo"></p>
+          <div id="cbArea"></div>
+        </div>
+      </div>
+
+      <!-- B) Relatório contra relatório: o mesmo título lançado em duas empresas -->
+      <div id="cbModoDois" role="tabpanel" aria-labelledby="cbModoDoisAba" hidden>
+        <div class="bloco">
+          <p class="bloco-intro">Procura títulos que podem ser pagos duas vezes, um em cada empresa: mesmo fornecedor e mesmo valor ao centavo.</p>
+          <div class="envios">
+            <div class="lado-relatorio">
+              <label class="campo">
+                <span class="campo-rotulo">Empresa do 1º relatório</span>
+                <select id="rrEmpresaA"></select>
+              </label>
+              <label class="caixa-envio travada" id="rrCaixaA">
+                <input type="file" class="caixa-envio-input" accept=".xlsx,.xls" disabled>
+                <svg class="ico" aria-hidden="true"><use href="#i-arquivo"/></svg>
+                <span class="caixa-envio-titulo">1º relatório do sistema</span>
+                <span class="caixa-envio-dica">Excel de títulos a pagar da empresa escolhida acima (com ou sem código de barras).</span>
+                <span class="caixa-envio-arquivo">Escolha a empresa primeiro</span>
+              </label>
+            </div>
+            <div class="lado-relatorio">
+              <label class="campo">
+                <span class="campo-rotulo">Empresa do 2º relatório</span>
+                <select id="rrEmpresaB"></select>
+              </label>
+              <label class="caixa-envio travada" id="rrCaixaB">
+                <input type="file" class="caixa-envio-input" accept=".xlsx,.xls" disabled>
+                <svg class="ico" aria-hidden="true"><use href="#i-arquivo"/></svg>
+                <span class="caixa-envio-titulo">2º relatório do sistema</span>
+                <span class="caixa-envio-dica">Excel de títulos a pagar de OUTRA empresa (com ou sem código de barras).</span>
+                <span class="caixa-envio-arquivo">Escolha a empresa primeiro</span>
+              </label>
+            </div>
+          </div>
+          <div class="acoes">
+            <button type="button" class="botao botao-principal" id="rrConferir" disabled>Conferir</button>
+            <button type="button" class="botao" id="rrBaixar" disabled>Baixar Excel</button>
+            <button type="button" class="botao" id="rrNova">Nova conferência</button>
+          </div>
+        </div>
+        <div class="mensagem mensagem-alerta mensagem-grande" id="rrAlerta" role="alert" hidden></div>
+        <div id="rrResultado" hidden>
+          <p class="info-resultado mono" id="rrInfo"></p>
+          <div id="rrArea"></div>
+        </div>
+      </div>
     </section>
 
     <!-- ===================== CONFERÊNCIA DE BOLETOS ===================== -->
@@ -235,6 +311,28 @@
         <p class="nota">No Excel, Conferidos, Datas divergentes e Nome divergente trazem o saldo do sistema; na tela, o valor do boleto.
            Por isso um total pode diferir em 1 centavo entre os dois.</p>
       </div>
+      <div class="bloco texto">
+        <h2>Código de barras</h2>
+        <p><b>Um relatório.</b> Envie o relatório do sistema "Vencimento / Cód. Barras" e clique em Conferir.
+           Entram os títulos com saldo e código de 40 dígitos ou mais. O valor do código são os últimos 10 dígitos (em centavos)
+           e é comparado com o saldo lançado. O código é lido sempre como texto: se o Excel gravou algum código como número,
+           o título fica de fora e aparece num alerta, porque os dígitos podem estar errados.
+           O Excel traz as abas Divergência de valor e Duplicados.</p>
+        <!-- legenda montada pelo js/telas/codigo-barras.js a partir de STATUS_CB -->
+        <ul class="legenda" id="ajudaStatusCb"></ul>
+        <p><b>Relatório contra relatório.</b> Procura títulos que podem ser pagos duas vezes, um em cada empresa.
+           Escolha a empresa e envie o relatório em cada caixa (as duas empresas têm que ser diferentes; relatório de outra
+           empresa é recusado). Com ou sem a coluna de código de barras.
+           Dois títulos casam quando o <b>valor é igual ao centavo</b> e o <b>nome do fornecedor</b> é o mesmo: uma palavra de
+           4 letras ou mais em comum (comparada pelas 5 primeiras, sem LTDA, SA, ME, COMERCIO e parecidas) ou o nome inteiro igual.
+           O vencimento pode ser diferente: só aparece como aviso. Os títulos que casam entre si ficam num grupo só, com todos os
+           candidatos juntos. Se o mesmo código de barras está nas duas empresas, a linha fica vermelha.
+           Antes de casar, os títulos que são a <b>mesma linha</b> nos dois relatórios (mesmo código do fornecedor, NF,
+           desdobramento, valor e vencimento) saem da conferência: isso acontece quando o relatório de uma empresa traz também
+           as linhas da outra. Eles ficam na aba "Mesma linha nos dois relatórios", só com a contagem e a lista.</p>
+        <!-- legenda montada pelo js/telas/codigo-barras.js a partir de STATUS_RR -->
+        <ul class="legenda" id="ajudaStatusRr"></ul>
+      </div>
     </section>
 
     <!-- ===================== PERFIL ===================== -->
@@ -262,10 +360,14 @@
 <script src="js/bancos/detecta.js"></script>
 <script src="js/boleto.js"></script>
 <script src="js/conferencias/dda.js"></script>
+<script src="js/conferencias/nomes.js"></script>
+<script src="js/conferencias/codigo-barras.js"></script>
+<script src="js/conferencias/relatorio-contra-relatorio.js"></script>
 <script src="js/excel.js"></script>
 <script src="js/telas/resultado.js"></script>
 <script src="js/telas/dda-bradesco.js"></script>
 <script src="js/telas/conferencia-dda.js"></script>
+<script src="js/telas/codigo-barras.js"></script>
 <script src="js/app.js"></script>
 </body>
 </html>

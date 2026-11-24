@@ -126,6 +126,22 @@
   padding:2px 8px;border-radius:10px;background:var(--cor-fundo);color:var(--cor);
 }
 
+/* ---------- Código de barras (as duas conferências da tela) ---------- */
+/* abas do topo da tela (Um relatório | Relatório contra relatório) */
+.abas-tela{margin:0 0 var(--esp-4)}
+.bloco-intro{color:var(--texto-fraco);margin-bottom:var(--esp-4)}
+#cbResultado:not([hidden]),#rrResultado:not([hidden]){margin-top:var(--esp-5)}
+/* cada lado do relatório contra relatório: seletor da empresa em cima da caixa */
+.lado-relatorio{display:flex;flex-direction:column;gap:var(--esp-3)}
+.lado-relatorio .campo{min-width:0}
+/* vários títulos da mesma empresa num grupo: um embaixo do outro na mesma célula */
+.tabela .lista-celula > span{display:block}
+.tabela .lista-celula > span + span{margin-top:var(--esp-1)}
+/* grupo com o MESMO código de barras nas duas empresas: linha e código em vermelho */
+.tabela tr.linha-alerta td{background:var(--alerta-fundo)}
+.tabela tr.linha-alerta td:first-child{box-shadow:inset 4px 0 0 var(--alerta-texto)}
+.tabela .codigo-igual{color:var(--alerta-texto);font-weight:600}
+
 /* ---------- Texto corrido (Ajuda, Perfil) ---------- */
 .texto p + p, .texto h2 + p, .texto p + ul, .texto ul + p{margin-top:var(--esp-3)}
 .legenda{list-style:none;display:grid;gap:var(--esp-2)}

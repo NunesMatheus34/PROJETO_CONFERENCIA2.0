@@ -20,6 +20,7 @@ const BORDA_FINA = { top:{style:'thin'}, left:{style:'thin'}, bottom:{style:'thi
 // Escreve uma aba: título (linha 1, fundo da cor do status), cabeçalho (linha 2) e as linhas.
 // aba = { nome, titulo, cor, colunas:[{cab, w, fmt}], linhas:[[...valores]] }.
 // Coluna com fmt '@' é gravada como texto; as de dinheiro ficam alinhadas à direita.
+// Coluna com quebra:true mostra cada linha do texto (separadas por \n) uma embaixo da outra.
 function escreveAba(wb, aba){
   const ws = wb.addWorksheet(aba.nome);
   const cor = CORES_STATUS[aba.cor] || CORES_STATUS.neutro;
@@ -48,9 +49,11 @@ function escreveAba(wb, aba){
     const r = ws.addRow(vals);
     r.eachCell({ includeEmpty:true }, c => { c.border = BORDA_FINA; });
     aba.colunas.forEach((c, i) => {
-      if(!c.fmt) return;
-      r.getCell(i+1).numFmt = c.fmt;
-      if(c.fmt !== '@') r.getCell(i+1).alignment = { horizontal:'right' };
+      if(c.fmt) r.getCell(i+1).numFmt = c.fmt;
+      const alinha = {};
+      if(c.fmt && c.fmt !== '@') alinha.horizontal = 'right';
+      if(c.quebra){ alinha.wrapText = true; alinha.vertical = 'top'; }
+      if(Object.keys(alinha).length) r.getCell(i+1).alignment = alinha;
     });
   });
 

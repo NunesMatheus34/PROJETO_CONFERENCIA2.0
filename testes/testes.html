@@ -1,4 +1,8 @@
 <!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<!-- o charset fica antes de tudo: o navegador só procura nos primeiros 1024 bytes -->
+<meta charset="UTF-8">
 <!-- =====================================================================
      TESTES DA CONFERÊNCIA DDA 2.0
      Rodam sozinhos ao abrir a página e mostram verde (passou) ou vermelho
@@ -10,11 +14,12 @@
      travas de empresa, banco e conta, o filtro de unidade do Itaú e o Excel)
      e o Bradesco (PDFs fictícios montados na hora: Leitura OK, contagem de
      "R$" diferente, PDF repetido, outra empresa, colunas deslocadas; e a
-     conferência com um caso de cada status).
+     conferência com um caso de cada status), o Código de barras (um
+     relatório: divergência, duplicado, código gravado como número) e o
+     Relatório contra relatório (vencimento diferente casa, valor diferente
+     não casa, mesmo código nas duas empresas fica vermelho, a mesma linha
+     nos dois relatórios sai da conferência e vai para a aba própria).
      ===================================================================== -->
-<html lang="pt-BR">
-<head>
-<meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Testes da Conferência</title>
 
@@ -73,8 +78,13 @@
 <script src="../js/bancos/detecta.js"></script>
 <script src="../js/boleto.js"></script>
 <script src="../js/conferencias/dda.js"></script>
+<script src="../js/conferencias/nomes.js"></script>
+<script src="../js/conferencias/codigo-barras.js"></script>
+<script src="../js/conferencias/relatorio-contra-relatorio.js"></script>
 <script src="../js/excel.js"></script>
 <script src="../js/telas/resultado.js"></script>
+<!-- só para as colunas da tabela (o destaque vermelho); a tela não é ligada aqui -->
+<script src="../js/telas/codigo-barras.js"></script>
 
 <script>
 /* ---------------------------------------------------------------------
@@ -547,6 +557,191 @@ async function rodaTestes(){
     await wb.xlsx.load(await montaExcel(abas));
     const nf = wb.getWorksheet('Conferidos').getRow(3).getCell(4);
     confere('Excel abre, 5 abas, NF gravada como texto', wb.worksheets.length === 5 && nf.value === '5001' && nf.numFmt === '@', `${nf.value} (${nf.numFmt})`);
+  });
+
+  // ---------- Código de barras: um relatório (relatório fictício) ----------
+  // códigos fictícios de 47 dígitos: o valor são os últimos 10 (em centavos)
+  const COD_BETA = '1'.repeat(37) + '0000050000';    // R$ 500,00 no código
+  const COD_DUP  = '2'.repeat(37) + '0000030000';    // R$ 300,00, lançado em dois títulos
+  const RELATORIO_CB = [
+    [5, 'CRV INDUSTRIAL LTDA'],
+    ['Duplicatas em Aberto Modelo A [3 - Vencimento / Cód. Barras / Nome do Cliente]', 'TITULOS A PAGAR'],
+    [],
+    ['Vencto.', 'Cliente', null, 'Duplicata', 'Des', 'Prf', 'Emissão', 'AT', 'Bco', 'Ope', 'CÓDIGO DE BARRAS', 'Saldo'],
+    ['10/12/2026', 101, 'ALFA FICTICIA LTDA',  '1001', 'A', 'NF', '01/11/2026', 0, null, null, LINHA,   1234.56],
+    ['10/12/2026', 102, 'BETA FICTICIA LTDA',  '1002', 'A', 'NF', '01/11/2026', 0, null, null, COD_BETA, 499.00],
+    ['11/12/2026', 103, 'GAMA FICTICIA LTDA',  '1003', 'A', 'NF', '01/11/2026', 0, null, null, COD_DUP,  300.00],
+    ['12/12/2026', 104, 'DELTA FICTICIA LTDA', '1004', 'A', 'NF', '01/11/2026', 0, null, null, COD_DUP,  300.00],
+    ['12/12/2026', 105, 'OMEGA FICTICIA LTDA', '1005', 'A', 'NF', '01/11/2026', 0, null, null, null,      700.00],
+    ['13/12/2026', 106, 'SIGMA FICTICIA LTDA', '1006', 'A', 'NF', '01/11/2026', 0, null, null, '123',     50.00],
+  ];
+
+  await teste('Código de barras: um relatório', async () => {
+    // OMEGA: o código foi gravado como NÚMERO no Excel (célula K9)
+    const leitura = await lerMatrizComTexto(excelFicticio(RELATORIO_CB, { K9: { t:'n', v:Number(CB) } }));
+    const r = conferirCodigoBarras(leitura);
+    confere('Valor do código = últimos 10 dígitos em centavos (R$ 1.234,56)', valorDoCodigoBarras(LINHA) === 1234.56, brl(valorDoCodigoBarras(LINHA)));
+    confere('4 títulos entram (código curto e código gravado como número ficam de fora)', r.titulos && r.titulos.length === 4,
+      r.titulos ? r.titulos.map(t => t.nome).join(', ') : r.erro);
+    confere('Código gravado como número → ilegível, com a linha do Excel (9)', r.ilegiveis.length === 1 && r.ilegiveis[0].linha === 9, JSON.stringify(r.ilegiveis));
+    confere('Divergência de valor: BETA (R$ 500,00 no código × R$ 499,00 lançado = +R$ 1,00)',
+      r.divergencias.length === 1 && r.divergencias[0].nome === 'BETA FICTICIA LTDA' && r.divergencias[0].diff === 1, JSON.stringify(r.divergencias.map(d => [d.nome, d.diff])));
+    confere('Duplicados: GAMA e DELTA com o mesmo código, num grupo só',
+      r.duplicados.length === 1 && r.duplicados[0].map(t => t.nome).join('|') === 'GAMA FICTICIA LTDA|DELTA FICTICIA LTDA', r.duplicados.map(g => g.map(t => t.nome).join('+')).join(' / '));
+    const l = linhasCodigoBarras(r);
+    confere('Cartões: Conferidos 3 (o duplicado também), Divergência 1, Duplicados 2',
+      l.ok.length === 3 && l.valor.length === 1 && l.dup.length === 2, `${l.ok.length} · ${l.valor.length} · ${l.dup.length}`);
+    const abas = abasExcelCodigoBarras(r);
+    confere('Excel: abas com os mesmos nomes da tela (Divergência de valor, Duplicados)',
+      abas.map(a => a.nome).join('|') === 'Divergência de valor|Duplicados', abas.map(a => a.nome).join(' · '));
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(await montaExcel(abas));
+    const cod = wb.getWorksheet('Duplicados').getRow(3).getCell(5);
+    confere('Excel abre e o código de barras vai como texto (47 dígitos iguais)', cod.value === COD_DUP && cod.numFmt === '@', `${cod.value} (${cod.numFmt})`);
+  });
+
+  await teste('Código de barras: relatório sem a coluna de código', async () => {
+    const r = conferirCodigoBarras(await lerMatrizComTexto(excelFicticio([[1, 'CRV INDUSTRIAL LTDA'], ['Vencimento', 'Código', 'Nome', 'Título', 'Saldo']])));
+    confere('Sem "Código de barras" e "Saldo" na mesma linha → mesmo erro do antigo', /Não encontrei a linha de cabeçalho/.test(r.erro || ''), r.erro);
+  });
+
+  // ---------- Código de barras: relatório contra relatório (títulos fictícios) ----------
+  // t(nome, valor, venc, nf, codigo) monta um título como o extraiTitulosRelatorio devolve.
+  const t = (nome, valor, venc, nf, codigo) => ({ nome, valor, venc, nf, codigo: codigo || '', codigoIlegivel: false, linha: 0 });
+  const TITULOS_A = [
+    t('ALFA FICTICIA COMERCIO LTDA', 100.00, '10/12/2026', '2001'),
+    t('BETA FICTICIA LTDA',          200.00, '10/12/2026', '2002'),
+    t('GAMA FICTICIA LTDA',          300.00, '11/12/2026', '2003', CB),
+    t('DELTA FICTICIA LTDA',         400.00, '12/12/2026', '2004'),
+    t('DELTA FICTICIA LTDA',         400.00, '19/12/2026', '2005'),
+    t('EPSILON VIDROS LTDA',         500.00, '13/12/2026', '2006'),   // sem palavra em comum com ZETA
+  ];
+  const TITULOS_B = [
+    t('FORNECEDOR ALFA FICTICIA',    100.00, '15/12/2026', '3001'),
+    t('BETA FICTICIA LTDA',          200.01, '10/12/2026', '3002'),
+    t('GAMA FICTICIA S/A',           300.00, '11/12/2026', '3003', LINHA),
+    t('DELTA FICTICIA ME',           400.00, '12/12/2026', '3004'),
+    t('ZETA BORRACHAS LTDA',         500.00, '13/12/2026', '3006'),
+  ];
+
+  await teste('Relatório contra relatório: casamentos', () => {
+    const r = conferirRelatorios(TITULOS_A, TITULOS_B);
+    const grupos = [...r.mesmo, ...r.duplo];
+    const acha = nome => grupos.find(g => g.a.some(x => x.nome.startsWith(nome)));
+    const alfa = acha('ALFA');
+    confere('Mesmo nome e valor com vencimentos diferentes (10/12 × 15/12) CASA', alfa && alfa.a.length === 1 && alfa.b.length === 1, alfa ? alfa.b[0].nome : 'não casou');
+    const l = linhasRelatorios(r);
+    const linhaAlfa = [...l.mesmo, ...l.duplo].find(x => x.grupo === alfa);
+    confere('… e o vencimento diferente só vira aviso', linhaAlfa && avisosGrupoRR(linhaAlfa).includes('vencimentos diferentes'), linhaAlfa ? avisosGrupoRR(linhaAlfa).join(' · ') : '');
+    confere('Valor diferente (R$ 200,00 × R$ 200,01) NÃO casa', !acha('BETA'), '');
+    confere('Nome diferente com o mesmo valor (EPSILON × ZETA) NÃO casa', !acha('EPSILON'), '');
+    const delta = acha('DELTA');
+    confere('Dois candidatos da mesma empresa (DELTA 2004 e 2005) ficam juntos num grupo só',
+      delta && delta.a.length === 2 && delta.b.length === 1, delta ? `${delta.a.length} × ${delta.b.length}` : '');
+    const usados = grupos.flatMap(g => [...g.a, ...g.b].map(x => x.id));
+    confere('Cada título está em um grupo só', usados.length === new Set(usados).size, usados.join(','));
+    confere('Mesmo código nas duas empresas (código de barras × linha digitável do mesmo boleto) → "Mesmo boleto nas duas empresas"',
+      r.mesmo.length === 1 && r.mesmo[0].a[0].nome === 'GAMA FICTICIA LTDA', r.mesmo.map(g => g.a[0].nome).join(', '));
+    confere('Grupos: 1 mesmo boleto + 2 mesmo fornecedor e valor', r.mesmo.length === 1 && r.duplo.length === 2, `${r.mesmo.length} + ${r.duplo.length}`);
+  });
+
+  await teste('Relatório contra relatório: tela e Excel', async () => {
+    const r = conferirRelatorios(TITULOS_A, TITULOS_B);
+    const A = EMPRESAS.find(e => e.id === 'crv-matriz'), B = EMPRESAS.find(e => e.id === 'crv-filial');
+    const area = document.createElement('div');
+    const desenho = ligaResultado({ area, status: STATUS_RR, colunas: colunasTelaRr(A, B), soma: somaValores, busca: buscaCasa,
+                                    vazio: { mesmo:'', duplo:'', linha:'' }, qtd: n => `${n} grupos`, classeLinha: l => l.mesmoBoleto ? 'linha-alerta' : '' });
+    desenho.mostra(linhasRelatorios(r));
+    const vermelha = area.querySelector('tbody tr.linha-alerta');
+    confere('Mesmo código nas duas → linha VERMELHA com o aviso "mesmo boleto lançado nas duas empresas"',
+      vermelha && /mesmo boleto lançado nas duas empresas/.test(vermelha.textContent) && vermelha.querySelectorAll('.codigo-igual').length === 2,
+      vermelha ? vermelha.textContent.slice(0, 120) : 'sem linha vermelha');
+    const cartoes = [...area.querySelectorAll('.cartao')].slice(0, 2).map(c => c.querySelector('.cartao-qtd').textContent + ' · ' + c.querySelector('.cartao-total').textContent);
+    confere('Cartões com quantidade e total: 1 · R$ 300,00 e 2 · R$ 500,00', cartoes[0] === `1 · ${brl(300)}` && cartoes[1] === `2 · ${brl(500)}`, cartoes.join(' | '));
+    const abas = abasExcelRelatorios(r, A, B);
+    confere('Excel: as mesmas abas da tela', abas.map(a => a.nome).join('|') === STATUS_RR.map(s => s.nome).join('|'), abas.map(a => a.nome).join(' · '));
+    confere('Excel: as mesmas colunas da tela, na mesma ordem', abas[0].colunas.map(c => c.cab).join('|') === colunasTelaRr(A, B).map(c => c.cab).join('|'), abas[0].colunas.map(c => c.cab).join(' · '));
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(await montaExcel(abas));
+    const ws = wb.getWorksheet(STATUS_RR[1].nome);
+    const linhaDelta = [3, 4].map(n => ws.getRow(n)).find(row => /DELTA/.test(String(row.getCell(1).value)));
+    confere('Excel: DELTA com as duas NFs da CRV Matriz uma embaixo da outra', linhaDelta && linhaDelta.getCell(2).value === '2004\n2005' && linhaDelta.getCell(2).alignment.wrapText,
+      linhaDelta ? JSON.stringify(linhaDelta.getCell(2).value) : 'sem DELTA');
+    const codigo = wb.getWorksheet(STATUS_RR[0].nome).getRow(3).getCell(4);
+    confere('Excel: código de barras gravado como texto', codigo.value === CB && codigo.numFmt === '@', `${codigo.value} (${codigo.numFmt})`);
+  });
+
+  await teste('Relatório contra relatório: leitura e travas', async () => {
+    const vencTitulos = excelFicticio([
+      ['1 CRV INDUSTRIAL LTDA   Empresa(s): 1 / 5 /'], ['Duplicatas em Aberto Modelo A [A - Vencimento de Títulos] TITULOS A PAGAR'], [],
+      ['Vencimento', 'Código', 'Nome', 'Título', 'Desdobramento', 'Saldo'],
+      ['10/12/2026', 101, 'ALFA FICTICIA LTDA', '2001', 'A', 100],
+      [null, null, null, null, 'Total', 100],
+    ]);
+    const l1 = await lerMatrizComTexto(vencTitulos);
+    const r1 = extraiTitulosRelatorio(l1);
+    confere('Relatório "Vencimento de Títulos": 1 título (a linha de total fica de fora), sem código', r1.titulos.length === 1 && r1.titulos[0].nf === '2001' && r1.titulos[0].codigo === '', JSON.stringify(r1.titulos));
+    confere('… e lê o código do fornecedor (coluna "Código") e o desdobramento', r1.titulos[0].fornecedor === '101' && r1.titulos[0].desd === 'A', `${r1.titulos[0].fornecedor} · ${r1.titulos[0].desd}`);
+    const l2 = await lerMatrizComTexto(excelFicticio(RELATORIO_CB, { K9: { t:'n', v:Number(CB) } }));
+    const r2 = extraiTitulosRelatorio(l2);
+    const omega = r2.titulos.find(x => x.nome.startsWith('OMEGA'));
+    confere('Relatório com código: 6 títulos (com ou sem código), NF da Duplicata, código como texto',
+      r2.titulos.length === 6 && r2.titulos[0].codigo === LINHA && r2.titulos[0].nf === '1001', r2.titulos.map(x => x.nf + ':' + (x.codigo || '-')).join(' '));
+    confere('Código gravado como número → ilegível (não entra na comparação de código)', omega && omega.codigoIlegivel && omega.codigo === '', omega ? textoCodigoRR(omega) : '');
+    const crvMatriz = EMPRESAS.find(e => e.id === 'crv-matriz'), crvFilial = EMPRESAS.find(e => e.id === 'crv-filial');
+    confere('identificaEmpresa: relatório da CRV Matriz na caixa da CRV Matriz → aceito', checaRelatorioCruzado(crvMatriz, l1.matriz) === '', '');
+    const outra = checaRelatorioCruzado(crvFilial, l1.matriz);
+    confere('Relatório da CRV Matriz na caixa da CRV Filial → alerta', /é da CRV Matriz, mas a empresa escolhida nesta caixa é CRV Filial/.test(outra), outra);
+    confere('As duas caixas com a mesma empresa → alerta; empresas diferentes → sem alerta',
+      /mesma empresa/.test(alertaEmpresasIguais(crvMatriz, crvMatriz)) && alertaEmpresasIguais(crvMatriz, crvFilial) === '', alertaEmpresasIguais(crvMatriz, crvMatriz));
+  });
+
+  // f(fornecedor, nome, nf, desd, valor, venc) monta um título com código do fornecedor e desdobramento.
+  const f = (fornecedor, nome, nf, desd, valor, venc) => ({ ...t(nome, valor, venc, nf), fornecedor, desd });
+  await teste('Relatório contra relatório: mesma linha nos dois relatórios', () => {
+    const A = [
+      f('901', 'SIGMA FICTICIA LTDA', '4001', 'A', 700.00, '10/12/2026'),   // igual em B → mesma linha
+      f('902', 'TAU FICTICIA LTDA',   '4002', 'A', 800.00, '10/12/2026'),   // em B com outro desdobramento
+      f('903', 'OMICRON FICTICIA LTDA','4003', 'A', 900.00, '10/12/2026'),  // em B com outro vencimento
+      f('904', 'KAPPA FICTICIA LTDA', '4004', 'A', 950.00, '10/12/2026'),   // 2 vezes em A, 1 em B
+      f('904', 'KAPPA FICTICIA LTDA', '4004', 'A', 950.00, '10/12/2026'),
+    ];
+    const B = [
+      f('901', 'SIGMA FICTICIA LTDA', '4001', 'A', 700.00, '10/12/2026'),
+      f('902', 'TAU FICTICIA LTDA',   '4002', 'B', 800.00, '10/12/2026'),
+      f('903', 'OMICRON FICTICIA LTDA','4003', 'A', 900.00, '11/12/2026'),
+      f('904', 'KAPPA FICTICIA LTDA', '4004', 'A', 950.00, '10/12/2026'),
+    ];
+    const r = conferirRelatorios(A, B);
+    const nomes = lista => lista.map(g => g.a[0].nome.split(' ')[0]).join(',');
+    confere('Mesmo código do fornecedor, NF, desdobramento, valor e vencimento → "Mesma linha", fora da conferência',
+      r.linha.some(g => g.a[0].nome.startsWith('SIGMA')) && ![...r.mesmo, ...r.duplo].some(g => g.a[0].nome.startsWith('SIGMA')), `linha: ${nomes(r.linha)} · duplo: ${nomes(r.duplo)}`);
+    confere('Desdobramento diferente → NÃO é a mesma linha: continua em "Mesmo fornecedor e valor"',
+      r.duplo.some(g => g.a[0].nome.startsWith('TAU')) && !r.linha.some(g => g.a[0].nome.startsWith('TAU')), `duplo: ${nomes(r.duplo)}`);
+    confere('Vencimento diferente → NÃO é a mesma linha: continua em "Mesmo fornecedor e valor"',
+      r.duplo.some(g => g.a[0].nome.startsWith('OMICRON')) && !r.linha.some(g => g.a[0].nome.startsWith('OMICRON')), `duplo: ${nomes(r.duplo)}`);
+    const kappaLinha = r.linha.filter(g => g.a[0].nome.startsWith('KAPPA')).length;
+    const kappaDuplo = r.duplo.find(g => g.a[0].nome.startsWith('KAPPA'));
+    confere('Linha 2 vezes em A e 1 em B: só 1 par sai como mesma linha (a sobra de A não tem par em B e não casa)',
+      kappaLinha === 1 && !kappaDuplo, `linha: ${kappaLinha} · duplo: ${kappaDuplo ? kappaDuplo.a.length + '×' + kappaDuplo.b.length : '-'}`);
+    const semCodigo = conferirRelatorios([t('SIGMA FICTICIA LTDA', 700, '10/12/2026', '4001')], [t('SIGMA FICTICIA LTDA', 700, '10/12/2026', '4001')]);
+    confere('Sem o código do fornecedor não dá para dizer que é a mesma linha → continua na conferência',
+      semCodigo.linha.length === 0 && semCodigo.duplo.length === 1, `${semCodigo.linha.length} · ${semCodigo.duplo.length}`);
+
+    const EA = EMPRESAS.find(e => e.id === 'rubi-matriz'), EB = EMPRESAS.find(e => e.id === 'rubi-filial');
+    const area = document.createElement('div');
+    const desenho = ligaResultado({ area, status: STATUS_RR, colunas: colunasTelaRr(EA, EB), soma: somaValores, busca: buscaCasa,
+                                    vazio: { mesmo:'', duplo:'', linha:'' } });
+    desenho.mostra(linhasRelatorios(r));
+    const cartao = area.querySelector('.cartao[data-status="linha"]');
+    confere('Cartão "Mesma linha nos dois relatórios": só a contagem (2), sem total',
+      cartao && cartao.querySelector('.cartao-nome').textContent === 'Mesma linha nos dois relatórios' && cartao.querySelector('.cartao-qtd').textContent === '2' && !cartao.querySelector('.cartao-total'),
+      cartao ? cartao.textContent : 'sem cartão');
+    cartao.click();
+    const rodape = area.querySelector('tfoot tr');
+    confere('Aba "Mesma linha": a lista com 2 linhas e rodapé sem soma', area.querySelectorAll('tbody tr').length === 2 && rodape.children.length === 1 && !/R\$/.test(rodape.textContent), rodape.textContent);
+    const aba = abasExcelRelatorios(r, EA, EB).find(a => a.nome === 'Mesma linha nos dois relatórios');
+    confere('Excel: aba "Mesma linha nos dois relatórios" com as mesmas 2 linhas', aba && aba.linhas.length === 2, aba ? String(aba.linhas.length) : 'sem aba');
   });
 
   mostraResultados();
