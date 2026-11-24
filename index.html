@@ -1,15 +1,16 @@
 <!DOCTYPE html>
 <!-- =====================================================================
-     CONFERÊNCIA DDA 2.0 — página única
-     Menu lateral à esquerda; cada tela é uma <section> que o menu mostra e
-     esconde pelo #endereço (js/app.js). Planilhas são lidas só no navegador.
+     CENTRAL FINANCEIRA (CRV · Rubi) — página única
+     Menu lateral à esquerda, montado pela lista MENU do js/app.js; cada tela
+     é uma <section> que o menu mostra e esconde pelo #endereço.
+     Planilhas são lidas só no navegador.
      Telas prontas: Conferência DDA (Santander, Itaú e Bradesco) e Código de barras. As outras chegam nas próximas etapas.
      ===================================================================== -->
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Conferência DDA</title>
+<title>Central Financeira</title>
 
 <!-- SheetJS (leitura de Excel no navegador): versão fixa + integrity (SRI) -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"
@@ -50,39 +51,55 @@
   <symbol id="i-ret" viewBox="0 0 24 24"><path d="M4 7.5h13M13.5 4 17 7.5 13.5 11M20 16.5H7M10.5 13 7 16.5l3.5 3.5"/></symbol>
   <symbol id="i-ajuda" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M9.6 9.4a2.5 2.5 0 1 1 3.4 2.3c-.6.3-1 .8-1 1.5v.6M12 16.8v.2"/></symbol>
   <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 6.5h16M4 12h16M4 17.5h16"/></symbol>
+  <symbol id="i-inicio" viewBox="0 0 24 24"><path d="M4 11 12 4.5l8 6.5M6 9.5v10h4.5v-5.5h3v5.5H18v-10"/></symbol>
+  <symbol id="i-conferencias" viewBox="0 0 24 24"><rect x="5" y="4" width="14" height="17" rx="1.5"/><path d="M9 4v-.5h6V4M8.5 10.5l1.5 1.5 2.5-2.5M14 11h2M8.5 16l1.5 1.5 2.5-2.5M14 16.5h2"/></symbol>
+  <symbol id="i-caixa" viewBox="0 0 24 24"><rect x="3.5" y="6.5" width="17" height="12" rx="1.5"/><path d="M3.5 10h17M15.5 14.5h2"/></symbol>
+  <symbol id="i-relatorios" viewBox="0 0 24 24"><path d="M4 20h16M7 20v-6M11 20V9M15 20v-4M19 20V6"/></symbol>
+  <symbol id="i-seta" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></symbol>
   <symbol id="i-arquivo" viewBox="0 0 24 24"><path d="M14 3.5H7.5a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h9a2 2 0 0 0 2-2V8z"/><path d="M14 3.5V8h4.5M12 17.5v-6M9.5 14 12 11.5l2.5 2.5"/></symbol>
 </svg>
 
-<!-- Menu lateral: cada item é um link #âncora (dá para abrir direto, e o Voltar funciona) -->
+<!-- Menu lateral: os grupos e as telas são montados pelo js/app.js a partir da lista MENU.
+     Cada tela é um link #âncora (dá para abrir direto, e o Voltar funciona). -->
 <nav class="menu" id="menu" aria-label="Telas">
-  <div class="menu-marca"><span class="selo">DDA</span><span>Conferência</span></div>
-  <a href="#conferencia-dda" class="menu-item" data-tela="conferencia-dda">
-    <svg class="ico" aria-hidden="true"><use href="#i-dda"/></svg><span>Conferência DDA</span></a>
-  <a href="#codigo-barras" class="menu-item" data-tela="codigo-barras">
-    <svg class="ico" aria-hidden="true"><use href="#i-barras"/></svg><span>Código de barras</span></a>
-  <a href="#conferencia-boletos" class="menu-item" data-tela="conferencia-boletos">
-    <svg class="ico" aria-hidden="true"><use href="#i-boleto"/></svg><span>Conferência de Boletos</span></a>
-  <a href="#dda-ret" class="menu-item" data-tela="dda-ret">
-    <svg class="ico" aria-hidden="true"><use href="#i-ret"/></svg><span>DDA → .RET</span></a>
-  <a href="#ajuda" class="menu-item menu-rodape" data-tela="ajuda">
-    <svg class="ico" aria-hidden="true"><use href="#i-ajuda"/></svg><span>Ajuda</span></a>
+  <div class="menu-marca">
+    <span class="menu-marca-nome">Central Financeira</span>
+    <span class="menu-marca-empresas">CRV · Rubi</span>
+  </div>
+  <div class="menu-lista" id="menuLista"></div>
+  <!-- rodapé separado: Ajuda (entra pelo js/app.js) e o usuário com o Perfil (fixo por enquanto) -->
+  <div class="menu-rodape" id="menuRodape">
+    <div class="usuario">
+      <span class="usuario-nome" id="usuarioNome">Usuário</span>
+      <a href="#perfil" class="usuario-perfil" data-tela="perfil">Perfil</a>
+    </div>
+  </div>
 </nav>
 <div class="menu-fundo" id="menuFundo"></div>
 
 <div class="conteudo">
 
-  <!-- Topo: botão do menu (só no celular) e, no canto, o usuário e o Perfil (fixos por enquanto) -->
+  <!-- Topo: botão do menu (só no celular) e o caminho da tela ("Conferências › Conferência DDA"),
+       escrito pelo js/app.js a partir da lista MENU -->
   <header class="topo">
     <button type="button" class="botao botao-icone menu-abrir" id="menuAbrir" aria-controls="menu" aria-expanded="false" aria-label="Abrir menu">
       <svg class="ico" aria-hidden="true"><use href="#i-menu"/></svg>
     </button>
-    <div class="usuario">
-      <span class="usuario-nome" id="usuarioNome">Usuário</span>
-      <a href="#perfil" class="usuario-perfil">Perfil</a>
-    </div>
+    <nav class="caminho" id="caminho" aria-label="Você está em"></nav>
   </header>
 
   <main>
+
+    <!-- ===================== INÍCIO ===================== -->
+    <section class="tela" id="tela-inicio" aria-labelledby="titulo-inicio" hidden>
+      <header class="tela-cabecalho">
+        <p class="sobretitulo">CRV · Rubi</p>
+        <h1 id="titulo-inicio">Central Financeira</h1>
+        <p class="tela-descricao">Conferências e arquivos bancários. Os arquivos são lidos só neste navegador: nenhuma planilha, PDF ou boleto é enviado para servidor.</p>
+      </header>
+      <!-- um cartão por grupo do menu, montado pelo js/app.js a partir da lista MENU -->
+      <div class="inicio-grupos" id="inicioGrupos"></div>
+    </section>
 
     <!-- ===================== CONFERÊNCIA DDA ===================== -->
     <section class="tela" id="tela-conferencia-dda" aria-labelledby="titulo-conferencia-dda" hidden>
@@ -265,7 +282,7 @@
     <section class="tela" id="tela-conferencia-boletos" aria-labelledby="titulo-conferencia-boletos" hidden>
       <header class="tela-cabecalho">
         <p class="sobretitulo">DDA × títulos com linha digitável</p>
-        <h1 id="titulo-conferencia-boletos">Conferência de Boletos</h1>
+        <h1 id="titulo-conferencia-boletos">Conferência de boletos</h1>
         <p class="tela-descricao">Pareia cada título com o boleto do DDA e só libera a linha digitável conferida.</p>
       </header>
       <p class="mensagem mensagem-aviso">! Esta tela chega numa próxima etapa.</p>

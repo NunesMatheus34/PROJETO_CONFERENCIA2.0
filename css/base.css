@@ -1,6 +1,7 @@
 /* =====================================================================
    BASE: cores, fontes, espaços e o esqueleto da página
-   (menu lateral, barra do topo, área das telas, botões e mensagens).
+   (menu lateral em grupos, barra do topo com o caminho, área das telas,
+   botões e mensagens).
    Visual clean: fundo claro e UMA cor de destaque. Todas as cores e
    medidas ficam nas variáveis abaixo; o resto do CSS usa só elas.
    As cores de status (ok, aviso, alerta, neutro) são as mesmas da tela,
@@ -69,27 +70,51 @@ a{color:var(--destaque)}
   overflow-y:auto;z-index:20;
 }
 .menu-marca{
-  display:flex;align-items:center;gap:var(--esp-2);
+  display:flex;flex-direction:column;
   padding:var(--esp-1) var(--esp-3) var(--esp-5);
-  font-weight:600;font-size:16px;
 }
-.selo{
-  font-family:var(--fonte-numeros);font-size:12px;font-weight:600;letter-spacing:.06em;
-  padding:2px 6px;border-radius:6px;background:var(--destaque);color:#fff;
-}
-.menu-item{
-  display:flex;align-items:center;gap:var(--esp-3);
+.menu-marca-nome{font-weight:600;font-size:16px;color:var(--destaque)}
+.menu-marca-empresas{font-size:12px;color:var(--texto-fraco);letter-spacing:.04em}
+.menu-lista{display:flex;flex-direction:column;gap:2px}
+
+/* item de tela (link) e botão de grupo têm o mesmo desenho */
+.menu-item, .menu-grupo-botao{
+  display:flex;align-items:center;gap:var(--esp-3);width:100%;
   padding:9px var(--esp-3);border-radius:var(--raio);
-  color:var(--texto-fraco);text-decoration:none;font-weight:500;
+  color:var(--texto-fraco);text-decoration:none;font:inherit;font-weight:500;text-align:left;
+  background:none;border:none;
 }
-.menu-item:hover{background:var(--superficie-suave);color:var(--texto)}
+.menu-item:hover, .menu-grupo-botao:hover:not(:disabled){background:var(--superficie-suave);color:var(--texto)}
 .menu-item.ativo{background:var(--destaque-claro);color:var(--destaque)}
-.menu-rodape{margin-top:auto}
+
+/* grupos: título com seta que gira quando abre; telas do grupo recuadas, sem ícone */
+.menu-grupo{margin-top:var(--esp-2)}
+.menu-grupo-botao{cursor:pointer}
+.menu-grupo-titulo{flex:1}
+.menu-seta{width:14px;height:14px;transition:transform .15s}
+.menu-grupo-botao[aria-expanded="true"] .menu-seta{transform:rotate(90deg)}
+.menu-grupo-botao:disabled{cursor:default;opacity:.7}
+.menu-grupo-telas{display:flex;flex-direction:column;gap:2px;margin-top:2px}
+.menu-subitem{padding-left:calc(var(--esp-3) + 18px + var(--esp-3));font-size:14px}
+
+/* etiqueta "em breve" dos grupos ainda sem telas */
+.etiqueta-em-breve{
+  font-size:11px;font-weight:600;letter-spacing:.03em;white-space:nowrap;
+  padding:1px 7px;border-radius:999px;
+  background:var(--neutro-fundo);color:var(--neutro-texto);
+}
+
+/* rodapé do menu, separado por uma linha: Ajuda e o usuário com o Perfil */
+.menu-rodape{
+  margin-top:auto;padding-top:var(--esp-3);
+  border-top:1px solid var(--borda);
+  display:flex;flex-direction:column;gap:2px;
+}
 
 /* fundo escuro atrás do menu quando ele abre por cima (celular) */
 .menu-fundo{display:none}
 
-/* ---------- Barra do topo (usuário e Perfil no canto) ---------- */
+/* ---------- Barra do topo (caminho da tela) ---------- */
 .topo{
   position:sticky;top:0;z-index:10;
   height:var(--altura-topo);
@@ -99,10 +124,19 @@ a{color:var(--destaque)}
   border-bottom:1px solid var(--borda);
 }
 .botao.menu-abrir{display:none}       /* o ☰ só aparece no celular */
-.usuario{margin-left:auto;display:flex;align-items:center;gap:var(--esp-3);font-size:14px}
-.usuario-nome{font-weight:500}
+.caminho{display:flex;align-items:center;gap:var(--esp-2);font-size:14px;min-width:0}
+.caminho-grupo{color:var(--texto-fraco)}
+.caminho-separador{color:var(--borda-forte)}
+.caminho-atual{font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+/* usuário no rodapé do menu: nome à esquerda, Perfil à direita */
+.usuario{
+  display:flex;align-items:center;justify-content:space-between;gap:var(--esp-3);
+  padding:9px var(--esp-3);font-size:14px;
+}
+.usuario-nome{font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .usuario-perfil{text-decoration:none;font-weight:500}
-.usuario-perfil:hover{text-decoration:underline}
+.usuario-perfil:hover, .usuario-perfil.ativo{text-decoration:underline}
 
 /* ---------- Área das telas ---------- */
 .conteudo{margin-left:var(--largura-menu);min-height:100vh}

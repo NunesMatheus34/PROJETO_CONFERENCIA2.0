@@ -17,6 +17,16 @@
 }
 .bloco + .bloco, .bloco + .mensagem, .mensagem + .bloco{margin-top:var(--esp-4)}
 
+/* ---------- Início: um cartão por grupo do menu ---------- */
+.inicio-grupos{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:var(--esp-4)}
+.inicio-grupos .bloco + .bloco{margin-top:0}
+.inicio-grupo h2{display:flex;align-items:center;gap:var(--esp-2);margin-bottom:var(--esp-3)}
+.inicio-grupo h2 .ico{color:var(--destaque)}
+.inicio-grupo ul{list-style:none;display:flex;flex-direction:column;gap:var(--esp-2)}
+.inicio-grupo a{text-decoration:none;font-weight:500}
+.inicio-grupo a:hover{text-decoration:underline}
+.inicio-grupo .etiqueta-em-breve{display:inline-block}
+
 /* ---------- Escolhas do topo (banco, empresa, unidade) ---------- */
 .escolhas{display:flex;flex-wrap:wrap;gap:var(--esp-4);margin-bottom:var(--esp-5)}
 .campo{display:flex;flex-direction:column;gap:var(--esp-1);min-width:220px}
