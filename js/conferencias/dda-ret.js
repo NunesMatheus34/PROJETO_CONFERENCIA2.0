@@ -8,6 +8,8 @@
    Filial, que têm Itaú); o CNPJ dela tem que existir num header de lote
    do modelo .RET; o DDA tem que ser do Itaú (Excel da conta da empresa
    escolhida, ou PDF "Boletos Recebidos (DDA)", que não traz o CNPJ).
+   Sub-etapa 2 (leitura): lê os boletos do Excel ou do PDF e confere a
+   contagem (nenhum boleto pode sumir); se não fechar, bloqueia.
    Só regras: a tela fica em js/telas/dda-ret.js.
    Precisa de js/empresas.js, js/leitura/ret.js, js/bancos/itau.js,
    js/conferencias/dda.js (checaDda) e js/conferencias/boletos.js (empresasBoletos).
@@ -89,4 +91,65 @@ function checagensEntradasRet({ empresa, modelo, dda }){
   }
   const pronto = !!(empresa && modelo && dda) && !lista.some(c => c.tipo === 'alerta');
   return { lista, pronto };
+}
+
+/* ---------------------------------------------------------------------
+   Sub-etapa 2: LEITURA DOS BOLETOS, SEM ALTERAR NADA
+   Excel pelo leitor que já existia (leitorItau, código SEMPRE pelo texto
+   da célula); PDF pelo leitorItauPdf (colunas pela posição do cabeçalho
+   de cada página). Antes de qualquer coisa, a CONTAGEM: nenhum boleto
+   pode sumir na leitura. Se a contagem não fechar, a geração fica
+   bloqueada e a tela diz onde (páginas do PDF ou linhas do Excel).
+   --------------------------------------------------------------------- */
+
+// Linhas de boleto do Excel do Itaú que a leitura deixou de fora: depois do cabeçalho,
+// linha com beneficiário, CPF/CNPJ ou código de barras mas sem "Até Venc." legível.
+// Devolve os números das linhas no Excel (para mostrar).
+function linhasExcelSemLeitura(leitura){
+  const m = leitura.matriz;
+  const cab = achaCabecalhoItau(m);
+  if(cab < 0) return [];
+  const c = colunasItau(m[cab]);
+  const tem = v => v !== null && v !== undefined && String(v).trim() !== '';
+  const fora = [];
+  for(let i = cab + 1; i < m.length; i++){
+    const l = m[i] || [];
+    if((tem(l[c.benef]) || tem(l[c.cnpj]) || tem(l[c.codigo])) && paraNumero(l[c.ateVenc]) === null) fora.push(leitura.linhaExcel(i));
+  }
+  return fora;
+}
+
+// Lê os boletos do DDA (dda = { tipo:'excel', matriz, textoDe, linhaExcel } ou { tipo:'pdf', pdf })
+// e confere a contagem. Devolve { boletos, total, contagem: { ok, texto, onde: [...] }, observacao }:
+//   PDF: ok só se o número lido = "NNN boleto(s) recebidos" do topo E cada página fecha a
+//        própria conta (um valor e duas metades de código por CNPJ); onde = páginas com diferença.
+//   Excel: ok só se nenhuma linha com dado de boleto ficou sem leitura; onde = linhas do Excel.
+//   observacao = o que o formato não consegue trazer igual ao banco (só para mostrar).
+function leituraDdaRet(dda){
+  if(dda.tipo === 'pdf'){
+    const declarado = reconhecePdfItau(dda.pdf).total;
+    const { boletos, paginas } = leitorItauPdf(dda.pdf);
+    const ruins = paginas.filter(p => p.problema);
+    const onde = ruins.map(p => `Página ${p.pagina}: ${p.problema}.`);
+    const bate = boletos.length === declarado;
+    if(!bate) onde.unshift(`O PDF diz ${declarado} boleto(s) recebidos, mas foram lidos ${boletos.length}.`);
+    const ok = bate && !ruins.length;
+    return { boletos, total: somaAteVenc(boletos), contagem: { ok, onde,
+      texto: ok ? `${boletos.length} boleto(s) lidos, igual ao que o PDF diz ("${declarado} boleto(s) recebidos"), e todas as ${paginas.length} páginas fecham.`
+                : 'A contagem do PDF não fecha: a geração do .RET fica bloqueada. Baixe o PDF de novo ou use o Excel.' },
+      observacao: 'No PDF, espaços repetidos do Nº Doc. aparecem como um só, e um nome quebrado no meio da palavra ganha um espaço. Código, CNPJ, vencimento e valores não mudam. Se puder, use o Excel.' };
+  }
+  const boletos = leitorItau(dda);
+  const fora = linhasExcelSemLeitura(dda);
+  const ok = fora.length === 0 && boletos.length > 0;
+  return { boletos, total: somaAteVenc(boletos), observacao: '', contagem: { ok,
+    onde: fora.length ? [`Linha(s) do Excel com boleto mas sem "Até Venc." legível: ${fora.join(', ')}.`] : [],
+    texto: ok ? `${boletos.length} boleto(s) lidos do Excel; nenhuma linha de boleto ficou de fora.`
+         : boletos.length ? 'Há linhas de boleto que não puderam ser lidas: a geração do .RET fica bloqueada.'
+                          : 'Não encontrei boletos no Excel (coluna "Até Venc." vazia).' } };
+}
+
+// Soma do "Até Venc." em centavos inteiros (sem erro de arredondamento), devolvida em reais.
+function somaAteVenc(boletos){
+  return boletos.reduce((s, b) => s + Math.round((b.valor || 0) * 100), 0) / 100;
 }

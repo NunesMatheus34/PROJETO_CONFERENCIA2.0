@@ -27,7 +27,9 @@
      diferente, código do sistema, folha, 2 vencimentos, Excel lido de volta;
      e, novos, a empresa pelo seletor com as travas e a tela) e as entradas
      do DDA → .RET (modelo .RET fictício, empresa fora do modelo, Excel de outra
-     conta, PDF do Itaú e PDF de outro tipo).
+     conta, PDF do Itaú e PDF de outro tipo) e a leitura dos boletos (PDF do
+     Itaú fictício com metades do código, Nº Doc. quebrado, contagem diferente;
+     Excel com linha sem "Até Venc.").
      ===================================================================== -->
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Testes da Conferência</title>
@@ -133,8 +135,9 @@ function excelFicticio(linhas, celulas){
 // Monta um PDF fictício de 1 página (texto em Helvetica) e devolve como File.
 // textos = [{ top, x, texto }]: top e x em pontos, contando do canto de cima à esquerda,
 // como no PDF do banco. Só letras do Latin-1 (ç, á, é, ô...).
-function pdfFicticio(textos, nome){
-  const L = 623.63, A = 963.79, TAM = 8.29;
+// formato = { largura, tamanho } da página e da letra (padrão: o PDF do Bradesco).
+function pdfFicticio(textos, nome, formato){
+  const L = (formato && formato.largura) || 623.63, A = 963.79, TAM = (formato && formato.tamanho) || 8.29;
   const escapa = t => t.replace(/[\\()]/g, c => '\\' + c);
   const conteudo = textos.map(({ top, x, texto }) =>
     `BT /F1 ${TAM} Tf 1 0 0 1 ${x.toFixed(2)} ${(A - top - TAM * 0.793).toFixed(2)} Tm (${escapa(texto)}) Tj ET`).join('\n');
@@ -1177,6 +1180,69 @@ async function rodaTestes(){
     confere('Modelo, empresa e PDF certos → pronto (com o aviso da empresa)', todos.pronto && todos.lista.map(c => c.tipo).join(',') === 'ok,ok,ok,aviso', todos.lista.map(c => c.titulo).join(' · '));
     const travado = checagensEntradasRet({ empresa: crvFilial, modelo: soMatriz, dda: { tipo:'pdf', pdf: pdfItau } });
     confere('Empresa fora do modelo → não fica pronto', !travado.pronto, travado.lista.map(c => c.titulo).join(' · '));
+  });
+
+  // ---------- DDA → .RET: leitura dos boletos e contagem (PDF e Excel FICTÍCIOS) ----------
+  // PDF do Itaú fictício no layout do banco: título, "N boleto(s) recebidos", cabeçalho com as
+  // colunas e, por boleto, o nome em cima, a 1ª metade do código, a linha do CNPJ e a 2ª metade.
+  // opcoes: declarado = o "N boleto(s)" do topo; semMetade = índice do boleto sem a 2ª metade;
+  // docQuebrado = índice do boleto com o Nº Doc. em duas linhas.
+  const COLS_ITAU = { 'Cod.':24, 'Barras':41, 'Pagador/Agregado':114, 'Beneficiário':182, 'CPF/CNPJ':251, 'Venc.':326, 'Nº':371, 'Doc.':381,
+                      'Até':421, 'Venc':434, 'A':476, 'Pagar':483, 'Tipo':529, 'de':545, 'Boleto':556, 'Banco':581, 'Observações':611 };
+  const pdfItauFicticio = (boletos, opcoes = {}) => {
+    const t = [{ top: 63, x: 21, texto: 'Boletos Recebidos (DDA)' },
+               { top: 82, x: 21, texto: `Emitido em 19/11/2026 às 16:00:37 via Internet - ${opcoes.declarado ?? boletos.length} boleto(s) recebidos` }];
+    Object.entries(COLS_ITAU).forEach(([palavra, x]) => t.push({ top: 97, x, texto: palavra === 'Venc' ? 'Venc.' : palavra }));
+    boletos.forEach((b, i) => {
+      const y = 119 + i * 40;
+      t.push({ top: y - 8, x: 182, texto: b.nome1 });
+      t.push({ top: y - 3.9, x: 24, texto: b.cb.slice(0, 22) }, { top: y - 3.9, x: 114, texto: 'EMPRESA FICTICIA' });
+      t.push({ top: y, x: 182, texto: b.nome2 }, { top: y, x: 251, texto: b.cnpj }, { top: y, x: 326, texto: b.venc },
+             { top: y, x: 371, texto: b.doc[0] }, { top: y, x: 421, texto: 'R$' }, { top: y, x: 431, texto: b.ateVenc },
+             { top: y, x: 476, texto: 'R$' }, { top: y, x: 486, texto: b.aPagar }, { top: y, x: 581, texto: b.banco });
+      if(opcoes.semMetade !== i) t.push({ top: y + 3.9, x: 24, texto: b.cb.slice(22) });
+      if(b.doc[1]) t.push({ top: y + 3.9, x: 371, texto: b.doc[1] });
+    });
+    t.push({ top: 119 + boletos.length * 40 + 20, x: 21, texto: 'Dúvidas, sugestões e reclamações: SAC Itaú 0800 000 0000' });
+    return pdfFicticio(t, 'dda_itau_ficticio.pdf', { largura: 842, tamanho: 5 });   // A4 deitado, letra pequena, como o do Itaú
+  };
+  const CB_R1 = codigoFicticio('341', '20/11/2026', 1234.56, 701), CB_R2 = codigoFicticio('237', '21/11/2026', 99.90, 702);
+  const BOLS_PDF = [
+    { nome1:'ALFA FICTICIA', nome2:'PECAS LTDA', cnpj:'11.222.333/0001-81', venc:'20/11/2026', doc:['NF1234', '-01'], ateVenc:'1.234,56', aPagar:'1.234,56', banco:'341', cb: CB_R1 },
+    { nome1:'BETA', nome2:'FICTICIA ME', cnpj:'123.456.789-09', venc:'21/11/2026', doc:['55 1'], ateVenc:'99,90', aPagar:'89,90', banco:'237', cb: CB_R2 },
+  ];
+
+  await teste('DDA → .RET: leitura do PDF', async () => {
+    const pdf = await lerPalavrasPdf(pdfItauFicticio(BOLS_PDF));
+    const r = leituraDdaRet({ tipo:'pdf', pdf });
+    const [a, b] = r.boletos;
+    confere('PDF fictício com 2 boletos → contagem fecha (2 lidos, "2 boleto(s) recebidos")', r.contagem.ok && r.boletos.length === 2, r.contagem.texto + ' ' + r.contagem.onde.join(' '));
+    confere('Código de barras = as duas metades, de cima para baixo, sem mudar nenhum dígito', a.codigoBarras === CB_R1 && b.codigoBarras === CB_R2, a.codigoTexto);
+    confere('Beneficiário juntando as linhas; CNPJ e CPF como vieram', a.beneficiario === 'ALFA FICTICIA PECAS LTDA' && b.beneficiario === 'BETA FICTICIA ME' &&
+      a.cnpj === '11.222.333/0001-81' && b.cnpj === '123.456.789-09', `${a.beneficiario} · ${b.beneficiario}`);
+    confere('Nº Doc. quebrado em duas linhas → juntado sem espaço; espaço na mesma linha fica', a.doc === 'NF1234-01' && b.doc === '55 1', `${a.doc} · ${b.doc}`);
+    confere('Venc., Até Venc., A Pagar e Banco; A Pagar menor → com desconto',
+      a.venc === '20/11/2026' && a.valor === 1234.56 && b.valor === 99.9 && b.valorAPagar === 89.9 && b.comDesconto && !a.comDesconto && b.banco === '237',
+      `${a.venc} ${a.valor} ${b.valor}/${b.valorAPagar} ${b.banco}`);
+    confere('Rodapé "Dúvidas" ignorado e total certo', r.total === 1334.46 && r.boletos.every(x => x.pagina === 1), String(r.total));
+
+    const mais = leituraDdaRet({ tipo:'pdf', pdf: await lerPalavrasPdf(pdfItauFicticio(BOLS_PDF, { declarado: 3 })) });
+    confere('PDF diz 3 boletos e foram lidos 2 → contagem não fecha (geração bloqueada)',
+      !mais.contagem.ok && /diz 3 boleto\(s\).*lidos 2/.test(mais.contagem.onde.join(' ')), mais.contagem.onde.join(' '));
+    const metade = leituraDdaRet({ tipo:'pdf', pdf: await lerPalavrasPdf(pdfItauFicticio(BOLS_PDF, { semMetade: 1 })) });
+    confere('Boleto sem a 2ª metade do código → página 1 aparece na diferença, código fica com 22 dígitos (não é completado)',
+      !metade.contagem.ok && /^Página 1: .*3 metades/.test(metade.contagem.onde.join(' ')) && metade.boletos[1].codigoBarras === CB_R2.slice(0, 22),
+      metade.contagem.onde.join(' '));
+  });
+
+  await teste('DDA → .RET: leitura do Excel', async () => {
+    const certo = leituraDdaRet({ tipo:'excel', ...(await lerMatrizComTexto(excelFicticio(ddaItauBol(crvFilial)))) });
+    confere('Excel fictício do Itaú → 1 boleto lido, contagem fecha', certo.contagem.ok && certo.boletos.length === 1 && certo.boletos[0].codigoBarras === COD_ALFA, certo.contagem.texto);
+    const linhas = ddaItauBol(crvFilial);
+    linhas.push(['EMPRESA FICTICIA', 'GAMA FICTICIA', '11.222.333/0001-81', '20/11/2026', '9002', null, null, 'DM', '341', '', CB_R1]);
+    const falta = leituraDdaRet({ tipo:'excel', ...(await lerMatrizComTexto(excelFicticio(linhas))) });
+    confere('Linha de boleto sem "Até Venc." → contagem não fecha, com o número da linha do Excel',
+      !falta.contagem.ok && /: 6\.$/.test(falta.contagem.onde[0] || ''), falta.contagem.onde.join(' '));
   });
 
   mostraResultados();

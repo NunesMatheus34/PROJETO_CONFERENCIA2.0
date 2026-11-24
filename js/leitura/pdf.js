@@ -61,3 +61,30 @@ async function lerPalavrasPdf(arquivo){
   }
   return { paginas, palavras };
 }
+
+/* ---------------------------------------------------------------------
+   LINHAS DO PDF (usadas pelos leitores do Bradesco e do Itaú)
+   Vieram do js/bancos/bradesco.js sem mudar nada.
+   --------------------------------------------------------------------- */
+
+// Distância máxima (em pontos) entre o top das palavras de uma mesma linha.
+const TOLERANCIA_LINHA = 2.5;
+
+// Junta as palavras em linhas: ordena por página, top e x (como o antigo) e põe na mesma
+// linha as palavras da mesma página com top a até 2,5 pontos do top da 1ª palavra da linha.
+// Devolve [{ pagina, top, palavras:[...] }].
+function linhasDoPdf(palavras){
+  const ordem = [...palavras].sort((a, b) => a.pagina - b.pagina || a.top - b.top || a.x - b.x);
+  const linhas = [];
+  ordem.forEach(p => {
+    const ultima = linhas[linhas.length - 1];
+    if(ultima && ultima.pagina === p.pagina && Math.abs(ultima.top - p.top) <= TOLERANCIA_LINHA) ultima.palavras.push(p);
+    else linhas.push({ pagina: p.pagina, top: p.top, palavras: [p] });
+  });
+  return linhas;
+}
+
+// Texto de uma linha, com as palavras da esquerda para a direita.
+function textoDaLinha(linha){
+  return [...linha.palavras].sort((a, b) => a.x - b.x).map(p => p.texto).join(' ');
+}

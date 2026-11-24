@@ -24,7 +24,7 @@
    A empresa do PDF vem só do cabeçalho do topo da página 1; a coluna
    Pagador de cada boleto é só lida (pode trazer outro nome e CNPJ).
    Nada aqui completa ou corrige um campo: o que faltar vira erro.
-   Precisa de js/leitura/formatos.js.
+   Precisa de js/leitura/formatos.js e js/leitura/pdf.js (linhasDoPdf, textoDaLinha).
    ===================================================================== */
 
 // Formatos do PDF do Bradesco (o CNPJ vem com 3 dígitos no 1º bloco: 003.347.747/0001-09).
@@ -34,27 +34,7 @@ const VALOR_BRADESCO = /^\d{1,3}(\.\d{3})*,\d{2}$/;
 const STATUS_BRADESCO = /^[A-ZÇÃÕÉÍ]+$/;
 const TITULO_DDA_BRADESCO = 'Boletos de Cobrança Registrados/DDA';
 
-// Distância máxima (em pontos) entre o top das palavras de uma mesma linha.
-const TOLERANCIA_LINHA = 2.5;
-
-// Junta as palavras em linhas: ordena por página, top e x (como o antigo) e põe na mesma
-// linha as palavras da mesma página com top a até 2,5 pontos do top da 1ª palavra da linha.
-// Devolve [{ pagina, top, palavras:[...] }].
-function linhasDoPdf(palavras){
-  const ordem = [...palavras].sort((a, b) => a.pagina - b.pagina || a.top - b.top || a.x - b.x);
-  const linhas = [];
-  ordem.forEach(p => {
-    const ultima = linhas[linhas.length - 1];
-    if(ultima && ultima.pagina === p.pagina && Math.abs(ultima.top - p.top) <= TOLERANCIA_LINHA) ultima.palavras.push(p);
-    else linhas.push({ pagina: p.pagina, top: p.top, palavras: [p] });
-  });
-  return linhas;
-}
-
-// Texto de uma linha, com as palavras da esquerda para a direita.
-function textoDaLinha(linha){
-  return [...linha.palavras].sort((a, b) => a.x - b.x).map(p => p.texto).join(' ');
-}
+// As linhas do PDF (linhasDoPdf, textoDaLinha) vêm de js/leitura/pdf.js: o Itaú usa as mesmas.
 
 // Dados do topo da 1ª página: se é o DDA do Bradesco, empresa (nome e CNPJ),
 // data/hora da operação e período de vencimento da consulta. O PDF não traz total impresso.

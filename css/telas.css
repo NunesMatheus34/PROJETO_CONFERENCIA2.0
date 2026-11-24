@@ -117,6 +117,8 @@
 
 /* ---------- Tabela de resultado ---------- */
 .tabela-caixa{overflow-x:auto;background:var(--superficie);border:1px solid var(--borda);border-top:none;border-radius:0 0 var(--raio) var(--raio)}
+/* tabela sem abas em cima (DDA → .RET): borda e cantos completos */
+.tabela-caixa.tabela-solta{border-top:1px solid var(--borda);border-radius:var(--raio)}
 .tabela .sub{display:block;font-size:12px;color:var(--texto-fraco);font-family:var(--fonte-texto)}
 .tabela .codigo{font-size:12px;word-break:break-all;min-width:200px}
 .tabela .sem-quebra{white-space:nowrap}
