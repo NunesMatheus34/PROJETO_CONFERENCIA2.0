@@ -16,11 +16,19 @@ const NOMES_BANCO = { santander:'Santander', itau:'Itaú', bradesco:'Bradesco' }
 // (Igual ao projeto antigo.)
 function detectaBanco(m){
   if(achaCabecalhoItau(m) >= 0) return 'itau';
+  return linhaCabecalhoDda(m) >= 0 ? 'santander' : null;
+}
+
+// Linha (índice) do cabeçalho da tabela de boletos do DDA: a do Itaú ("Beneficiário" e
+// "Código de barras") ou a do Santander ("Nosso Número" e "Beneficiário", nas 30 primeiras); -1 se não achar.
+function linhaCabecalhoDda(m){
+  const itau = achaCabecalhoItau(m);
+  if(itau >= 0) return itau;
   for(let i=0; i<Math.min(m.length, 30); i++){
     const cels = (m[i] || []).map(normaliza);
-    if(cels.includes('NOSSO NUMERO') && cels.includes('BENEFICIARIO')) return 'santander';
+    if(cels.includes('NOSSO NUMERO') && cels.includes('BENEFICIARIO')) return i;
   }
-  return null;
+  return -1;
 }
 
 // Mensagem para quando o DDA enviado é de outro banco que o escolhido no topo da tela.
@@ -31,10 +39,13 @@ function avisoBancoErrado(achado, escolhido){
 
 // CNPJ da conta que o banco escreve no topo do DDA, antes da lista de boletos
 // (Santander: linha 2, embaixo de "CPF/CNPJ:"; Itaú: "CPF/CNPJ: 11.222.333/0001-44", CNPJ fictício).
-// Procura o primeiro CNPJ escrito (00.000.000/0000-00) nas 10 primeiras linhas e
-// devolve só os 14 dígitos, ou '' se não achar.
+// Procura o primeiro CNPJ escrito (00.000.000/0000-00) nas 10 primeiras linhas, mas SÓ
+// ACIMA do cabeçalho da tabela: sem a linha "CPF/CNPJ:", o CNPJ de um beneficiário (que vem
+// nas linhas de boleto) não pode virar o CNPJ da conta. Devolve só os 14 dígitos, ou '' se não achar.
 function cnpjDaContaDda(m){
-  for(let i=0; i<Math.min(m.length, 10); i++){
+  const cab = linhaCabecalhoDda(m);
+  const fim = Math.min(m.length, 10, cab >= 0 ? cab : Infinity);
+  for(let i=0; i<fim; i++){
     for(const cel of (m[i] || [])){
       const achou = cel!=null && String(cel).match(/\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}/);
       if(achou) return apenasDigitos(achou[0]);

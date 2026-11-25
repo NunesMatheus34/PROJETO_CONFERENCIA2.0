@@ -101,7 +101,7 @@ function mostraLeituraRet(pronto){
   if(!l){ elRet('retContagem').replaceChildren(); elRet('retTabela').replaceChildren(); return; }
   const checagens = [{ tipo: l.contagem.ok ? 'ok' : 'alerta', titulo: l.contagem.ok ? 'Contagem dos boletos' : 'Contagem não fecha',
                        texto: l.contagem.texto, itens: l.contagem.onde }];
-  if(l.observacao) checagens.push({ tipo:'aviso', titulo:'Leitura pelo PDF', texto: l.observacao });
+  l.observacoes.forEach(o => checagens.push({ tipo:'aviso', ...o }));
   elRet('retContagem').replaceChildren(...checagensDom(checagens));
   elRet('retInfo').textContent = `${l.boletos.length} boleto(s) lido(s) · total "Até Venc." ${brl(l.total)} · ` +
     'tabela só de leitura: os boletos ainda não foram conferidos (travas na próxima sub-etapa).';

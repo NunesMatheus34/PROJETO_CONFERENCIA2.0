@@ -171,10 +171,13 @@ function colunaPdfItau(x, colunas){
   return achou;
 }
 
-// Texto das palavras de um bloco numa coluna: palavras da mesma linha separadas por
-// espaço; linhas diferentes juntadas com "juntaLinhas" (espaço no nome, nada no Nº Doc.).
+// Texto das palavras de um bloco numa coluna e em quantas linhas ele veio: palavras da
+// mesma linha separadas por espaço; as linhas juntadas com "juntaLinhas" (decisão do usuário,
+// conferida no PDF real × Excel: no nome com espaço; no Nº Doc. SEM espaço, que acertou 7 de 9).
+// O PDF não mostra espaços repetidos ("1  0000383" aparece "1 0000383"): isso não é recuperado.
 function textoColunaItau(palavras, juntaLinhas){
-  return linhasDoPdf(palavras).map(textoDaLinha).join(juntaLinhas);
+  const linhas = linhasDoPdf(palavras);
+  return { texto: linhas.map(textoDaLinha).join(juntaLinhas), linhas: linhas.length };
 }
 
 // Lê os boletos do PDF "Boletos Recebidos (DDA)" do Itaú (palavras de lerPalavrasPdf).
@@ -220,20 +223,22 @@ function leitorItauPdf(leituraPdf){
       const codigoTexto = metades.map(w => w.texto).join('');
       const valor = paraNumero(semRS(naLinha('ateVenc')));
       const valorAPagar = paraNumero(semRS(naLinha('aPagar')));
+      const nome = textoColunaItau(naColuna('benef'), ' '), doc = textoColunaItau(naColuna('doc'), '');
       boletos.push({
         venc: naLinha('venc').map(w => w.texto).join(' '),
-        beneficiario: textoColunaItau(naColuna('benef'), ' '),
+        beneficiario: nome.texto,
         cnpj: ancora.texto,
-        doc: textoColunaItau(naColuna('doc'), ''),
+        doc: doc.texto,
         valor,
         valorAPagar,
         codigoBarras: apenasDigitos(codigoTexto),
-        pagador: textoColunaItau(naColuna('pagador'), ' '),
+        pagador: textoColunaItau(naColuna('pagador'), ' ').texto,
         banco: naLinha('banco').map(w => w.texto).join(' '),
         comDesconto: valorAPagar !== null && valor !== null && valorAPagar !== valor,
         codigoTexto,
         codigoSuspeito: false,
         pagina: p + 1,
+        linhasDoc: doc.linhas,     // em quantas linhas do PDF o Nº Doc. veio (mais de uma = a tela lista)
       });
     });
 

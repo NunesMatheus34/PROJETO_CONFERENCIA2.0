@@ -54,7 +54,7 @@ function checaDdaRet(empresa, dda){
   }
   const trava = checaDda('itau', empresa, dda.matriz);
   if(!trava.bloqueio && !cnpjDaContaDda(dda.matriz))
-    return { bloqueio:'Não achei o CNPJ da conta ("CPF/CNPJ:") no topo do Excel do Itaú. Sem ele não dá para garantir que o DDA é da ' +
+    return { bloqueio:'Não achei o CNPJ da conta no topo do Excel do Itaú (linha "CPF/CNPJ:"). Sem ele não dá para garantir que o DDA é da ' +
                       `${empresa.nome}. Baixe de novo o Excel "Boletos Recebidos" do internet banking, sem apagar as linhas do topo.`, aviso:'', descricao:'' };
   const consulta = dataHoraConsultaItau(dda.matriz);
   return { ...trava, descricao: trava.bloqueio ? '' : 'Excel do Itaú da conta ' + empresa.cnpj + (consulta ? `, consulta de ${consulta}` : '') + '.' };
@@ -120,11 +120,11 @@ function linhasExcelSemLeitura(leitura){
 }
 
 // Lê os boletos do DDA (dda = { tipo:'excel', matriz, textoDe, linhaExcel } ou { tipo:'pdf', pdf })
-// e confere a contagem. Devolve { boletos, total, contagem: { ok, texto, onde: [...] }, observacao }:
+// e confere a contagem. Devolve { boletos, total, contagem: { ok, texto, onde: [...] }, observacoes }:
 //   PDF: ok só se o número lido = "NNN boleto(s) recebidos" do topo E cada página fecha a
 //        própria conta (um valor e duas metades de código por CNPJ); onde = páginas com diferença.
 //   Excel: ok só se nenhuma linha com dado de boleto ficou sem leitura; onde = linhas do Excel.
-//   observacao = o que o formato não consegue trazer igual ao banco (só para mostrar).
+//   observacoes = avisos do que o PDF não consegue trazer igual ao banco (observacoesPdfRet).
 function leituraDdaRet(dda){
   if(dda.tipo === 'pdf'){
     const declarado = reconhecePdfItau(dda.pdf).total;
@@ -137,16 +137,31 @@ function leituraDdaRet(dda){
     return { boletos, total: somaAteVenc(boletos), contagem: { ok, onde,
       texto: ok ? `${boletos.length} boleto(s) lidos, igual ao que o PDF diz ("${declarado} boleto(s) recebidos"), e todas as ${paginas.length} páginas fecham.`
                 : 'A contagem do PDF não fecha: a geração do .RET fica bloqueada. Baixe o PDF de novo ou use o Excel.' },
-      observacao: 'No PDF, espaços repetidos do Nº Doc. aparecem como um só, e um nome quebrado no meio da palavra ganha um espaço. Código, CNPJ, vencimento e valores não mudam. Se puder, use o Excel.' };
+      observacoes: observacoesPdfRet(boletos) };
   }
   const boletos = leitorItau(dda);
   const fora = linhasExcelSemLeitura(dda);
   const ok = fora.length === 0 && boletos.length > 0;
-  return { boletos, total: somaAteVenc(boletos), observacao: '', contagem: { ok,
+  return { boletos, total: somaAteVenc(boletos), observacoes: [], contagem: { ok,
     onde: fora.length ? [`Linha(s) do Excel com boleto mas sem "Até Venc." legível: ${fora.join(', ')}.`] : [],
     texto: ok ? `${boletos.length} boleto(s) lidos do Excel; nenhuma linha de boleto ficou de fora.`
          : boletos.length ? 'Há linhas de boleto que não puderam ser lidas: a geração do .RET fica bloqueada.'
                           : 'Não encontrei boletos no Excel (coluna "Até Venc." vazia).' } };
+}
+
+// Avisos da leitura pelo PDF (amarelos, não bloqueiam), cada um { titulo, texto, itens }:
+// o geral (espaços repetidos perdidos; Excel recomendado) e a lista dos boletos com o
+// Nº Doc. em mais de uma linha (página e beneficiário), para a pessoa conferir: a quebra
+// é juntada sem espaço, e o PDF não diz se ali havia espaço ou não.
+function observacoesPdfRet(boletos){
+  const item = b => `Página ${b.pagina}: ${b.beneficiario} (Nº Doc. "${b.doc}")`;
+  const docs = boletos.filter(b => b.linhasDoc > 1);
+  const lista = [{ titulo:'Leitura pelo PDF', itens: [], texto:
+    'O PDF não mostra espaços repetidos (um Nº Doc. do banco com dois espaços seguidos aparece com um só) e eles não são recuperados. ' +
+    'Quebras de linha do Nº Doc. são juntadas sem espaço, e as do nome com um espaço. Código, CNPJ, vencimento e valores não mudam. O recomendado é usar o Excel.' }];
+  if(docs.length) lista.push({ titulo:`Nº Doc. em mais de uma linha: ${docs.length} boleto(s)`, itens: docs.map(item),
+    texto:'Confira o Nº Doc. destes boletos: as linhas foram juntadas sem espaço, e o documento do banco pode ter um espaço ali.' });
+  return lista;
 }
 
 // Soma do "Até Venc." em centavos inteiros (sem erro de arredondamento), devolvida em reais.

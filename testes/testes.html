@@ -1159,9 +1159,13 @@ async function rodaTestes(){
     const lDdaFilial = await lerMatrizComTexto(excelFicticio(ddaItauBol(crvFilial)));
     const excelOutra = checaDdaRet(crvMatriz, { tipo:'excel', ...lDdaFilial });
     confere('Excel do Itaú da conta da filial com CRV Matriz escolhida → bloqueado', /CRV Filial/.test(excelOutra.bloqueio), excelOutra.bloqueio);
-    const semCnpj = await lerMatrizComTexto(excelFicticio(ddaItauBol(crvFilial).filter(l => !/^CPF\/CNPJ/.test(l[0])).map(l => l.map(c => /^\d{2}\.\d{3}/.test(c) ? '' : c))));
+    // sem a linha "CPF/CNPJ:", mas COM o CNPJ do beneficiário na linha do boleto: ele não pode virar o da conta
+    const semCnpj = await lerMatrizComTexto(excelFicticio(ddaItauBol(crvFilial).filter(l => !/^CPF\/CNPJ/.test(l[0]))));
     const rSemCnpj = checaDdaRet(crvFilial, { tipo:'excel', ...semCnpj });
-    confere('Excel do Itaú sem o CNPJ da conta no topo → bloqueado (no .RET não é só aviso)', /Não achei o CNPJ da conta/.test(rSemCnpj.bloqueio), rSemCnpj.bloqueio);
+    confere('Excel do Itaú sem a linha "CPF/CNPJ:" (com CNPJ de beneficiário embaixo) → "Não achei o CNPJ da conta no topo do Excel do Itaú"',
+      cnpjDaContaDda(semCnpj.matriz) === '' && rSemCnpj.bloqueio.startsWith('Não achei o CNPJ da conta no topo do Excel do Itaú'), rSemCnpj.bloqueio);
+    const avisoDda = checaDda('itau', crvFilial, semCnpj.matriz);
+    confere('… e na Conferência DDA o mesmo Excel continua só com o aviso (não acusa "outro CNPJ")', !avisoDda.bloqueio && /Não achei o CNPJ/.test(avisoDda.aviso), avisoDda.aviso || avisoDda.bloqueio);
     const excelCerto = checaDdaRet(crvFilial, { tipo:'excel', ...lDdaFilial });
     confere('Excel do Itaú da conta certa → liberado', !excelCerto.bloqueio && !excelCerto.aviso, excelCerto.descricao);
 
@@ -1220,7 +1224,11 @@ async function rodaTestes(){
     confere('Código de barras = as duas metades, de cima para baixo, sem mudar nenhum dígito', a.codigoBarras === CB_R1 && b.codigoBarras === CB_R2, a.codigoTexto);
     confere('Beneficiário juntando as linhas; CNPJ e CPF como vieram', a.beneficiario === 'ALFA FICTICIA PECAS LTDA' && b.beneficiario === 'BETA FICTICIA ME' &&
       a.cnpj === '11.222.333/0001-81' && b.cnpj === '123.456.789-09', `${a.beneficiario} · ${b.beneficiario}`);
-    confere('Nº Doc. quebrado em duas linhas → juntado sem espaço; espaço na mesma linha fica', a.doc === 'NF1234-01' && b.doc === '55 1', `${a.doc} · ${b.doc}`);
+    confere('Nº Doc. quebrado em duas linhas → juntado SEM espaço; espaço na mesma linha fica', a.doc === 'NF1234-01' && b.doc === '55 1', `${a.doc} · ${b.doc}`);
+    const obs = r.observacoes.map(o => o.titulo + ': ' + o.itens.join(' / '));
+    confere('Aviso do PDF lista só o Nº Doc. em 2 linhas (página e beneficiário), sem lista de nomes',
+      r.observacoes.length === 2 && r.observacoes[0].titulo === 'Leitura pelo PDF' && /espaços repetidos/.test(r.observacoes[0].texto) &&
+      obs[1] === 'Nº Doc. em mais de uma linha: 1 boleto(s): Página 1: ALFA FICTICIA PECAS LTDA (Nº Doc. "NF1234-01")', obs.join(' | '));
     confere('Venc., Até Venc., A Pagar e Banco; A Pagar menor → com desconto',
       a.venc === '20/11/2026' && a.valor === 1234.56 && b.valor === 99.9 && b.valorAPagar === 89.9 && b.comDesconto && !a.comDesconto && b.banco === '237',
       `${a.venc} ${a.valor} ${b.valor}/${b.valorAPagar} ${b.banco}`);
@@ -1237,7 +1245,7 @@ async function rodaTestes(){
 
   await teste('DDA → .RET: leitura do Excel', async () => {
     const certo = leituraDdaRet({ tipo:'excel', ...(await lerMatrizComTexto(excelFicticio(ddaItauBol(crvFilial)))) });
-    confere('Excel fictício do Itaú → 1 boleto lido, contagem fecha', certo.contagem.ok && certo.boletos.length === 1 && certo.boletos[0].codigoBarras === COD_ALFA, certo.contagem.texto);
+    confere('Excel fictício do Itaú → 1 boleto lido, contagem fecha, sem avisos de PDF', certo.observacoes.length === 0 && certo.contagem.ok && certo.boletos.length === 1 && certo.boletos[0].codigoBarras === COD_ALFA, certo.contagem.texto);
     const linhas = ddaItauBol(crvFilial);
     linhas.push(['EMPRESA FICTICIA', 'GAMA FICTICIA', '11.222.333/0001-81', '20/11/2026', '9002', null, null, 'DM', '341', '', CB_R1]);
     const falta = leituraDdaRet({ tipo:'excel', ...(await lerMatrizComTexto(excelFicticio(linhas))) });
