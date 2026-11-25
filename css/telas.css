@@ -240,3 +240,33 @@
   .cartao-qtd{font-size:20px}
   .acoes .botao{flex:1}
 }
+
+/* ---------- Entrada (antes de tudo) e Perfil ---------- */
+/* caixa branca no meio da tela, com a marca em cima; as abas Entrar / Criar conta usam .abas/.aba */
+.entrada{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:var(--esp-5) var(--esp-4)}
+.entrada-caixa{
+  width:100%;max-width:400px;background:var(--superficie);border:1px solid var(--borda);
+  border-radius:var(--raio);padding:var(--esp-6) var(--esp-5);box-shadow:var(--sombra);
+}
+.entrada-marca{display:flex;flex-direction:column;margin-bottom:var(--esp-5)}
+.entrada-carregando{color:var(--texto-fraco)}
+.abas-entrada{margin:0 0 var(--esp-5)}
+.abas-entrada .aba{flex:1}
+.entrada-form{display:flex;flex-direction:column;gap:var(--esp-4)}
+.entrada-form .campo{min-width:0}
+.entrada-espera{display:flex;flex-direction:column;align-items:flex-start;gap:var(--esp-4)}
+.entrada-ola{font-weight:600}
+.entrada-espera .mensagem{align-self:stretch}
+
+/* campos de texto e senha (entrada e Perfil): o mesmo desenho dos seletores */
+.campo input{
+  font:inherit;font-size:15px;color:var(--texto);background:var(--superficie);
+  border:1px solid var(--borda-forte);border-radius:var(--raio);padding:9px 10px;
+}
+.campo input:focus{border-color:var(--destaque)}
+.campo-dica{font-size:12px;color:var(--texto-fraco)}
+
+/* Perfil: dados da conta em duas colunas e o formulário da senha mais estreito */
+.perfil-lista{display:grid;grid-template-columns:max-content 1fr;gap:var(--esp-2) var(--esp-5);align-items:center}
+.perfil-lista dt{font-size:13px;font-weight:600;color:var(--texto-fraco)}
+.perfil-senha{max-width:440px}

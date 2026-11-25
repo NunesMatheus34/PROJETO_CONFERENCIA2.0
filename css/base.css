@@ -115,6 +115,15 @@ a{color:var(--destaque)}
   display:flex;flex-direction:column;gap:2px;
 }
 
+/* Sair: no rodapé do menu, embaixo do usuário, com o desenho de item do menu */
+.menu-sair{cursor:pointer}
+
+/* antes do login liberar: menu e telas escondidos, só a tela de entrada (css/telas.css) */
+body.travado .menu, body.travado .menu-fundo, body.travado .conteudo{display:none}
+
+/* elemento que existe só para o navegador (ex.: nome para o gerenciador de senhas) */
+.oculto{position:absolute;width:1px;height:1px;overflow:hidden;opacity:0;pointer-events:none}
+
 /* fundo escuro atrás do menu quando ele abre por cima (celular) */
 .menu-fundo{display:none}
 

@@ -8,7 +8,7 @@
      Rodam sozinhos ao abrir a página e mostram verde (passou) ou vermelho
      (falhou), com o placar no topo. Usam SÓ dados fictícios e as funções
      do próprio site (js/), carregadas sem a tela.
-     Hoje cobrem: módulo de boleto (os testes do projeto antigo e mais
+     Hoje cobrem: o login (nome → e-mail interno, senha mínima), o módulo de boleto (os testes do projeto antigo e mais
      alguns bloqueios), leitura de Excel com o código como texto, o
      identificaEmpresa e a Conferência DDA (um caso de cada status, as
      travas de empresa, banco e conta, o filtro de unidade do Itaú e o Excel)
@@ -111,6 +111,10 @@
 <script src="../js/telas/codigo-barras.js"></script>
 <!-- só para desenhar linhas da tabela (textContent e Copiar); a tela não é ligada aqui -->
 <script src="../js/telas/boletos.js"></script>
+<!-- login: a conversão nome → e-mail interno, a regra da senha e os dados do cadastro novo
+     (só funções que não falam com o Firebase são chamadas aqui) -->
+<script src="../js/login/nome-email.js"></script>
+<script src="../js/login/cadastro.js"></script>
 
 <script>
 /* ---------------------------------------------------------------------
@@ -239,6 +243,42 @@ async function rodaTestes(){
   const ESP = { banco:'341', valor:1234.56, venc:'23/10/2026' };
   const CB = '34191160800001234561234567890123456789012345';
   const LINHA = '34191234546789012345767890123457116080000123456';
+
+  // ---------- login: nome → e-mail interno (nomes fictícios) ----------
+  await teste('Login: nome vira e-mail interno', () => {
+    const r = nomeParaLogin('  Fulano   de Tal ');
+    confere('"  Fulano   de Tal " → fulano.de.tal@conferencia.local, nome guardado limpo',
+      r.email === 'fulano.de.tal@conferencia.local' && r.nome === 'Fulano de Tal', JSON.stringify(r));
+    confere('Acento e cedilha somem: "Conceição Ávila" → conceicao.avila@',
+      nomeParaLogin('Conceição Ávila').email === 'conceicao.avila@conferencia.local', nomeParaLogin('Conceição Ávila').email);
+    confere('"José Silva" e "jose silva" dão o MESMO login (nome repetido)',
+      nomeParaLogin('José Silva').email === nomeParaLogin('jose silva').email);
+    confere('Hífen e número ficam: "Ana-Maria 2" → ana-maria.2@',
+      nomeParaLogin('Ana-Maria 2').email === 'ana-maria.2@conferencia.local', nomeParaLogin('Ana-Maria 2').email);
+    confere('Nome curto demais é recusado', !!nomeParaLogin('Al').erro);
+    confere('Nome vazio é recusado', !!nomeParaLogin('   ').erro);
+    confere('Símbolo (@) é recusado, não some calado', !!nomeParaLogin('fulano@tal').erro);
+    confere('Letra sem versão simples (ß) é recusada', !!nomeParaLogin('Straße Teste').erro);
+    confere('Só pontos e hífens é recusado', !!nomeParaLogin('...---').erro);
+  });
+
+  await teste('Login: senha nova', () => {
+    confere('7 caracteres: recusada', /mínimo 8/.test(confereSenhaNova('1234567', '1234567')));
+    confere('8 caracteres iguais: aceita', confereSenhaNova('12345678', '12345678') === '');
+    confere('Confirmação diferente: recusada', /não são iguais/.test(confereSenhaNova('12345678', '12345679')));
+  });
+
+  await teste('Login: cadastro novo com o campo login', () => {
+    const login = nomeParaLogin('Fulano de Tal');
+    const agora = { marca: 'hora do servidor' };
+    const c = dadosCadastroNovo(login.nome, login.email, agora);
+    confere('Exatamente os 6 campos que as regras aceitam',
+      Object.keys(c).sort().join(',') === 'criadoEm,login,nome,papel,status,ultimoAcesso', Object.keys(c).join(','));
+    confere('login = e-mail interno do nome (fulano.de.tal@conferencia.local)', c.login === 'fulano.de.tal@conferencia.local', c.login);
+    confere('nome = o que a pessoa digitou, limpo', c.nome === 'Fulano de Tal');
+    confere('Nasce "usuario" e "aguardando"', c.papel === 'usuario' && c.status === 'aguardando');
+    confere('criadoEm e ultimoAcesso = a mesma hora do servidor', c.criadoEm === agora && c.ultimoAcesso === agora);
+  });
 
   // ---------- módulo de boleto (testes do projeto antigo) ----------
   await teste('Boleto: código válido', () => {

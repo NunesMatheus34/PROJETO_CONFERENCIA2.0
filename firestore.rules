@@ -1,0 +1,127 @@
+// =====================================================================
+// REGRAS DE SEGURANÇA DO FIRESTORE — Central Financeira
+// Este arquivo NÃO roda sozinho: copie tudo e cole no console do Firebase
+// (Firestore Database › Regras › Publicar). São estas regras, e não o
+// código do site, que protegem os dados: o site é público e qualquer um
+// pode abrir o JavaScript, mas o servidor do Firebase só aceita o que
+// passar aqui.
+//
+// Hoje só existe a coleção usuarios/{uid}, com:
+//   nome, login (o e-mail interno da conta, ex.: fulano.de.tal@conferencia.local),
+//   papel ("usuario" | "adm"), status ("aguardando" | "liberado" |
+//   "bloqueado"), criadoEm, ultimoAcesso.
+// O "nome" é só o que a pessoa digitou; o "login" é conferido aqui contra o
+// e-mail da conta (request.auth.token.email), então é ele que diz quem é quem.
+// Coleção nova (histórico, controle do .RET...) só funciona depois de
+// ganhar regra própria aqui: o resto fica fechado (última regra).
+// =====================================================================
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ---------- funções de apoio ----------
+
+    // Está logado (o Firebase Authentication confirmou quem é).
+    function logado() {
+      return request.auth != null;
+    }
+
+    // É o dono do cadastro {uid}: o login é o mesmo do documento.
+    function dono(uid) {
+      return logado() && request.auth.uid == uid;
+    }
+
+    // É administrador: o PRÓPRIO cadastro (lido no servidor, não o que o
+    // navegador diz) tem papel "adm" E status "liberado". Um adm bloqueado
+    // perde os poderes na hora.
+    function ehAdm() {
+      return logado()
+        && exists(/databases/$(database)/documents/usuarios/$(request.auth.uid))
+        && get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data.papel == 'adm'
+        && get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data.status == 'liberado';
+    }
+
+    // O nome é texto de 3 a 60 caracteres (o mesmo limite da tela de entrada).
+    function nomeValido(nome) {
+      return nome is string && nome.size() >= 3 && nome.size() <= 60;
+    }
+
+    // Os 6 campos do cadastro: nenhum a mais.
+    function soCamposDoCadastro() {
+      return request.resource.data.keys().hasOnly(['nome', 'login', 'papel', 'status', 'criadoEm', 'ultimoAcesso']);
+    }
+
+    // O login gravado é o e-mail da conta que está fazendo o pedido
+    // (o Firebase Authentication diz qual é; o navegador não consegue falsificar).
+    function loginDaConta() {
+      return request.resource.data.login is string
+        && request.resource.data.login == request.auth.token.email;
+    }
+
+    // O login não mudou (vale também para cadastro antigo sem login: continua sem).
+    function loginIntocado() {
+      return request.resource.data.get('login', null) == resource.data.get('login', null);
+    }
+
+    // ---------- usuarios/{uid} ----------
+    match /usuarios/{uid} {
+
+      // LER: cada um lê só o próprio cadastro; o adm lê todos.
+      allow read: if dono(uid) || ehAdm();
+
+      // CRIAR: só o próprio cadastro, logo depois de criar a conta, e só do
+      // jeito "conta nova": exatamente os 6 campos, login == e-mail da conta,
+      // papel "usuario", status "aguardando" e as duas datas com a hora do
+      // servidor (request.time). Assim ninguém nasce adm nem liberado, não
+      // inventa data e não cria cadastro com o login de outra pessoa.
+      allow create: if dono(uid)
+        && soCamposDoCadastro()
+        && request.resource.data.keys().hasAll(['nome', 'login', 'papel', 'status', 'criadoEm', 'ultimoAcesso'])
+        && nomeValido(request.resource.data.nome)
+        && loginDaConta()
+        && request.resource.data.papel == 'usuario'
+        && request.resource.data.status == 'aguardando'
+        && request.resource.data.criadoEm == request.time
+        && request.resource.data.ultimoAcesso == request.time;
+
+      // ATUALIZAR (a própria pessoa): só o ultimoAcesso, com a hora do servidor.
+      // Qualquer outro campo mudado (papel, status, nome, login, criadoEm) faz
+      // o Firebase recusar: ninguém se promove nem se libera sozinho.
+      // Única exceção: cadastro antigo, criado antes do campo "login", pode
+      // ganhar o login UMA vez, e só se for o e-mail da própria conta.
+      allow update: if dono(uid)
+        && request.resource.data.ultimoAcesso == request.time
+        && (
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['ultimoAcesso'])
+          || (!('login' in resource.data)
+              && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['ultimoAcesso', 'login'])
+              && loginDaConta())
+        );
+
+      // ATUALIZAR (adm): o adm edita qualquer cadastro (liberar, bloquear,
+      // tornar adm), mas sem fugir do formato: os mesmos 6 campos, papel e
+      // status só com os valores conhecidos, nome válido, e login e criadoEm
+      // intocados (o adm não troca a identidade de ninguém).
+      allow update: if ehAdm()
+        && soCamposDoCadastro()
+        && nomeValido(request.resource.data.nome)
+        && loginIntocado()
+        && request.resource.data.papel in ['usuario', 'adm']
+        && request.resource.data.status in ['aguardando', 'liberado', 'bloqueado']
+        && request.resource.data.criadoEm == resource.data.criadoEm;
+
+      // APAGAR: ninguém apaga pelo site (nem o adm). Para tirar alguém, o adm
+      // muda o status para "bloqueado"; apagar de vez só pelo console.
+      allow delete: if false;
+    }
+
+    // ---------- todo o resto ----------
+    // Qualquer outra coleção ou documento: fechado para leitura e escrita.
+    // (As regras do Firebase somam permissões: o que não foi liberado acima
+    // continua proibido.)
+    match /{qualquerDocumento=**} {
+      allow read, write: if false;
+    }
+  }
+}
