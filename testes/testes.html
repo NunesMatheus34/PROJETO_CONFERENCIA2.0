@@ -1703,16 +1703,28 @@ async function rodaTestes(){
     confere('NSA já usado → recusado, com a sugestão', !checaNsa('900005', usados).ok && /já foi usado.*900006/.test(checaNsa('900005', usados).motivo), checaNsa('900005', usados).motivo);
     confere('NSA abaixo de 900001 (pode bater com os do banco) → recusado', !checaNsa('000741', usados).ok && /a partir de 900001/.test(checaNsa('741', usados).motivo));
     confere('NSA com letra, vazio ou com 7 dígitos → recusado', !checaNsa('90000A', usados).ok && !checaNsa('', usados).ok && !checaNsa('9000001', usados).ok);
+    confere('Registros do Firestore + NSAs antigos deste computador → lista única em ordem',
+      controleDeRegistros([{ nsa: 900003 }, { nsa: 900001 }], [900001, 900002]).usados.join() === '900001,900002,900003');
+    confere('Id do documento = NSA com 6 dígitos', idNsa(900001) === '900001');
+    const quem = { uid: 'u1', login: 'fulano.de.tal@conferencia.local', nome: 'Fulano de Tal' };
+    const SHA = 'a'.repeat(64), SHA2 = '0123456789abcdef'.repeat(4);
+    const reg = montaRegistroRet({ nsa: 900007, empresa: EMPRESAS.find(e => e.id === 'crv-matriz'), qtdBoletos: 3, teste: true,
+                                   shaRet: SHA, shaDda: SHA2, total: 1234.56, fornecedor: 'FORNECEDOR FICTICIO LTDA' }, quem);
+    confere('Registro do .RET: só quem, NSA, empresa, quantidade, teste e os dois SHA-256 (sem total em R$)',
+      Object.keys(reg.registro || {}).sort().join(',') === 'empresa,login,nome,nsa,qtdBoletos,shaDda,shaRet,teste,uid' &&
+      !/1234[.,]56|FORNECEDOR/.test(JSON.stringify(reg.registro)), JSON.stringify(reg));
+    confere('NSA abaixo de 900001: registro recusado', !!montaRegistroRet({ nsa: 741, empresa: 'crv-matriz', qtdBoletos: 1, shaRet: SHA, shaDda: SHA }, quem).erro);
+    confere('SHA-256 inválido: registro recusado', !!montaRegistroRet({ nsa: 900001, empresa: 'crv-matriz', qtdBoletos: 1, shaRet: 'xyz', shaDda: SHA }, quem).erro);
+    confere('Zero boletos: registro recusado', !!montaRegistroRet({ nsa: 900001, empresa: 'crv-matriz', qtdBoletos: 0, shaRet: SHA, shaDda: SHA }, quem).erro);
     const guardado = localStorage.getItem(CHAVE_CONTROLE_NSA);
     try{
-      localStorage.removeItem(CHAVE_CONTROLE_NSA);
-      await gravarNsaUsado(900003);
-      const c = await gravarNsaUsado(900001);
+      localStorage.setItem(CHAVE_CONTROLE_NSA, JSON.stringify({ versao: 1, usados: [900004] }));
       const lido = await lerControleNsa();
-      confere('Gravar NSA usado e ler de volta → a lista em ordem, sem repetir', JSON.stringify(lido) === JSON.stringify(c) && lido.usados.join() === '900001,900003' &&
-        (await gravarNsaUsado(900003)).usados.length === 2, JSON.stringify(lido));
+      confere('Sem login: lê só os NSAs antigos deste computador e avisa', lido.usados.join() === '900004' && lido.erro === 'sem login', JSON.stringify(lido));
+      const g = await gravarNsaUsado(900005, { empresa: 'crv-matriz', qtdBoletos: 1, shaRet: SHA, shaDda: SHA });
+      confere('Sem login: não marca o NSA (e o download fica bloqueado)', !g.ok, JSON.stringify(g));
       localStorage.setItem(CHAVE_CONTROLE_NSA, '{estragado');
-      confere('Controle estragado → começa vazio', (await lerControleNsa()).usados.length === 0);
+      confere('Controle local estragado → nada local', (await lerControleNsa()).usados.length === 0);
     } finally {
       if(guardado === null) localStorage.removeItem(CHAVE_CONTROLE_NSA); else localStorage.setItem(CHAVE_CONTROLE_NSA, guardado);
     }

@@ -41,12 +41,14 @@ function liberaSite(cadastro){
   if(primeiraVez){
     // os seletores foram montados antes do login (sem empresa nenhuma): monta de novo
     preencheEmpresasBol(); preencheEmpresasRr(); preencheEmpresasRet(); trocaBancoDda();
+    if(telaPermitida('dda-ret')) carregaControleNsaRet();   // NSAs usados no Firestore (só depois do login)
     aplicaPermissoesMenu();
   }
   document.getElementById('usuarioNome').textContent = cadastro.nome || '';
   mostraPerfil(cadastro);
   ajustaTelaUsuarios(cadastro, firebaseConectado().auth.currentUser.uid);   // só o adm vê a Administração
   ajustaTelaHistorico(cadastro);
+  ajustaTelaControleRet(cadastro);
   escondeEntrada();
   document.body.classList.remove('travado');
 }

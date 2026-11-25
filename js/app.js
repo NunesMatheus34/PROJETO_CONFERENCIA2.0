@@ -45,6 +45,7 @@ const MENU = [
   { id: 'adm', grupo: 'Administração', icone: 'i-adm', soAdm: true, telas: [
     { tela: 'usuarios',  titulo: 'Usuários' },
     { tela: 'historico', titulo: 'Histórico' },
+    { tela: 'controle-ret', titulo: 'Controle do .RET' },
   ]},
 ];
 

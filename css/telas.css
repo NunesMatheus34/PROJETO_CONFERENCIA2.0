@@ -317,3 +317,7 @@ body:not(.eh-adm) .so-adm{display:none}
 
 /* Histórico: quantidades por aba em letra menor */
 .tabela-historico .historico-abas{font-size:13px;color:var(--texto-fraco);min-width:260px}
+
+/* Controle do .RET: os dois SHA-256 em letra pequena, quebrando onde precisar */
+.tabela-controle-ret .sha{font-family:var(--fonte-numeros);font-size:11px;word-break:break-all;min-width:260px;display:block}
+.tabela-controle-ret .sha-rotulo{font-size:12px;color:var(--texto-fraco)}

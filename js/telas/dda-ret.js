@@ -435,6 +435,18 @@ function mostraGeradoRet(){
   elRet('retGerado').replaceChildren(criaCom('div', 'arquivo-gerado', filhos));
 }
 
+// Lê os NSAs usados (Firestore + os antigos deste computador), sugere o próximo e
+// atualiza os botões. Chamada ao abrir a página e de novo pela sessão depois do login
+// (antes do login só os locais são conhecidos; o download confere no Firestore de qualquer jeito).
+function carregaControleNsaRet(){
+  return lerControleNsa().then(c => {
+    telaRet.controleNsa = c;
+    const atual = checaNsa(elRet('retNsa').value, c);
+    if(!elRet('retNsa').value || !atual.ok) elRet('retNsa').value = String(proximoNsa(c));
+    atualizaGerarRet();
+  });
+}
+
 // Baixa o .RET: confere de novo que o NSA não foi usado (outra aba pode ter baixado) e que os
 // bytes são os mesmos do SHA-256 mostrado, marca o NSA como usado e só então baixa.
 // Se não der para marcar o NSA, NÃO baixa (o número poderia se repetir).
@@ -447,13 +459,17 @@ async function baixaRetGerado(){
   if(telaRet.gerado !== g) return;
   if(!nsa.ok){ mostraMensagem(aviso, 'alerta', nsa.motivo + ' Gere o arquivo de novo com outro NSA.'); return; }
   if(await sha256Hex(g.bytes) !== g.sha){ mostraMensagem(aviso, 'alerta', 'O arquivo na memória não tem mais o SHA-256 mostrado: gere de novo.'); return; }
-  const gravado = await gravarNsaUsado(g.nsa);
-  if(!gravado){
-    mostraMensagem(aviso, 'alerta', 'Não consegui marcar o NSA como usado neste navegador: download bloqueado (o NSA poderia se repetir).');
-    botao.disabled = false;
+  // marca o NSA no Firestore com o registro do arquivo (quem, quando, empresa, NSA, quantidade,
+  // teste e os dois SHA-256; nunca o total em R$). Se não gravar, NÃO baixa.
+  const r = await gravarNsaUsado(g.nsa, { empresa: g.empresa, qtdBoletos: g.qtdBoletos, teste: g.teste,
+                                          shaRet: g.sha, shaDda: telaRet.dda.sha256 });
+  if(r.controle){ telaRet.controleNsa = r.controle; }
+  if(!r.ok){
+    mostraMensagem(aviso, 'alerta', r.motivo + ' Download bloqueado (o NSA poderia se repetir). Gere o arquivo de novo com outro NSA.');
+    if(r.controle){ elRet('retNsa').value = String(proximoNsa(r.controle)); }
     return;
   }
-  telaRet.controleNsa = gravado;
+  const gravado = r.controle;
   baixaArquivo(g.bytes, g.nomeArquivo, 'application/octet-stream');
   g.baixado = true;
   botao.textContent = '✓ .RET baixado';
@@ -490,11 +506,7 @@ function iniciaTelaRet(){
   elRet('retNsa').addEventListener('input', () => { limpaGeradoRet(); atualizaGerarRet(); });
   elRet('retGerarTeste').addEventListener('click', () => gerarRet(true));
   elRet('retGerarCompleto').addEventListener('click', () => gerarRet(false));
-  lerControleNsa().then(c => {
-    telaRet.controleNsa = c;
-    if(!elRet('retNsa').value) elRet('retNsa').value = String(proximoNsa(c));
-    atualizaGerarRet();
-  });
+  carregaControleNsaRet();
   elRet('retEmpresa').addEventListener('change', trocaEmpresaRet);
   ligaCaixaEnvio(elRet('retCaixaModelo'), recebeModeloRet);
   ligaCaixaEnvio(elRet('retCaixaDda'), recebeDdaRet);

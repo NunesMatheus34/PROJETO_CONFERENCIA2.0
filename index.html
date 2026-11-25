@@ -678,6 +678,28 @@
       </div>
     </section>
 
+    <!-- ===================== CONTROLE DO .RET (Administração) =====================
+         Os .RET baixados (coleção controleRet do Firestore). Desenhada pelo js/telas/controle-ret.js. -->
+    <section class="tela" id="tela-controle-ret" aria-labelledby="titulo-controle-ret" hidden>
+      <header class="tela-cabecalho">
+        <p class="sobretitulo">Administração</p>
+        <h1 id="titulo-controle-ret">Controle do .RET</h1>
+        <p class="tela-descricao">Cada .RET baixado: quem, quando, empresa, NSA, quantos boletos e o SHA-256 do .RET e do DDA
+           (para conferir com a aba Controle do Excel). O total em R$ não é gravado.</p>
+      </header>
+      <p class="mensagem mensagem-alerta" id="controleRetSemAcesso">Só o administrador vê esta tela.</p>
+      <div id="controleRetArea" hidden>
+        <p class="mensagem" id="controleRetMensagem" role="status" hidden></p>
+        <p class="usuarios-resumo" id="controleRetResumo"></p>
+        <div class="tabela-caixa tabela-solta">
+          <table class="tabela tabela-controle-ret">
+            <thead><tr><th class="num">NSA</th><th class="num">Quando</th><th>Quem</th><th>Empresa</th><th class="num">Boletos</th><th>SHA-256</th></tr></thead>
+            <tbody id="controleRetCorpo"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
     <!-- ===================== PERFIL ===================== -->
     <section class="tela" id="tela-perfil" aria-labelledby="titulo-perfil" hidden>
       <header class="tela-cabecalho">
@@ -775,6 +797,7 @@
 <script src="js/telas/confirmacao.js"></script>
 <script src="js/telas/usuarios.js"></script>
 <script src="js/telas/historico.js"></script>
+<script src="js/telas/controle-ret.js"></script>
 <script src="js/login/sessao.js"></script>
 </body>
 </html>

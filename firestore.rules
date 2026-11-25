@@ -20,7 +20,11 @@
 //   ({ idDaAba: quantidade inteira }). NUNCA fornecedor, código ou valor:
 //   as regras abaixo recusam qualquer outro campo e qualquer aba que não
 //   seja um número inteiro.
-// Coleção nova (controle do .RET...) só funciona depois de
+// controleRet/{NSA}: um documento por .RET baixado; o id é o NSA com 6
+//   dígitos, então o mesmo NSA nunca é gravado duas vezes. Campos: uid,
+//   login, nome, quando, nsa, empresa, qtdBoletos, teste, shaRet, shaDda.
+//   Nunca o total em R$.
+// Coleção nova (memória de fornecedores...) só funciona depois de
 // ganhar regra própria aqui: o resto fica fechado (última regra).
 // =====================================================================
 rules_version = '2';
@@ -204,6 +208,50 @@ service cloud.firestore {
         && abasValidas(request.resource.data.abas);
 
       // EDITAR e APAGAR: ninguém, nem o adm (só pelo console do Firebase).
+      allow update, delete: if false;
+    }
+
+    // ---------- controleRet/{nsa} ----------
+
+    // SHA-256 em hexadecimal minúsculo (64 caracteres).
+    function shaValido(s) {
+      return s is string && s.matches('^[0-9a-f]{64}$');
+    }
+
+    match /controleRet/{nsaId} {
+
+      // LER: quem pode usar a tela DDA → .RET (para saber os NSAs usados) e o adm.
+      allow read: if logado()
+        && exists(/databases/$(database)/documents/usuarios/$(request.auth.uid))
+        && meuCadastro().status == 'liberado'
+        && podeTela(meuCadastro(), 'dda-ret');
+
+      // CRIAR: só se o NSA ainda não existe (criar por cima de um que existe é
+      // "editar", e editar é proibido). Em nome próprio, hora do servidor, só os
+      // campos da lista, id do documento = o NSA com 6 dígitos, NSA de 900001 a
+      // 999999, empresa com permissão e os dois SHA-256 válidos.
+      allow create: if logado()
+        && exists(/databases/$(database)/documents/usuarios/$(request.auth.uid))
+        && meuCadastro().status == 'liberado'
+        && podeTela(meuCadastro(), 'dda-ret')
+        && request.resource.data.keys().hasOnly(['uid', 'login', 'nome', 'quando', 'nsa', 'empresa', 'qtdBoletos', 'teste', 'shaRet', 'shaDda'])
+        && request.resource.data.keys().hasAll(['uid', 'login', 'nome', 'quando', 'nsa', 'empresa', 'qtdBoletos', 'teste', 'shaRet', 'shaDda'])
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.login == request.auth.token.email
+        && request.resource.data.nome == meuCadastro().nome
+        && request.resource.data.quando == request.time
+        && request.resource.data.nsa is int
+        && request.resource.data.nsa >= 900001 && request.resource.data.nsa <= 999999
+        && nsaId == string(request.resource.data.nsa)
+        && request.resource.data.empresa in ['crv-matriz', 'crv-filial', 'rubi-matriz', 'rubi-filial']
+        && podeEmpresa(meuCadastro(), request.resource.data.empresa)
+        && request.resource.data.qtdBoletos is int
+        && request.resource.data.qtdBoletos >= 1 && request.resource.data.qtdBoletos <= 100000
+        && request.resource.data.teste is bool
+        && shaValido(request.resource.data.shaRet)
+        && shaValido(request.resource.data.shaDda);
+
+      // EDITAR e APAGAR: ninguém, nem o adm (um NSA usado continua usado).
       allow update, delete: if false;
     }
 
