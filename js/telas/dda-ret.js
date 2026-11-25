@@ -460,6 +460,12 @@ async function baixaRetGerado(){
   elRet('retNsa').value = String(proximoNsa(gravado));
   atualizaGerarRet();
   mostraMensagem(aviso, 'ok', `${g.nomeArquivo} baixado. NSA ${String(g.nsa).padStart(6, '0')} marcado como usado; o próximo sugerido é ${proximoNsa(gravado)}.`);
+  // histórico: um registro por .RET baixado, só com as quantidades (nada do arquivo)
+  registraUso({ tela: 'dda-ret', banco: 'itau', empresa: g.empresa, abas: {
+    noArquivo: g.qtdBoletos,
+    fora: telaRet.travas ? telaRet.travas.fora.length : 0,
+    atencao: telaRet.alertas && telaRet.alertas.atencao ? telaRet.alertas.atencao.length : 0,
+  }});
 }
 
 // Baixa o Excel de conferência (4 abas), depois de lê-lo de volta (excelRetConferido).

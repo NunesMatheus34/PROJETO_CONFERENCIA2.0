@@ -314,3 +314,6 @@ body:not(.eh-adm) .so-adm{display:none}
 .permissoes-colunas legend{font-size:13px;font-weight:600;color:var(--texto-fraco);padding:0 var(--esp-1)}
 .permissao-item{display:flex;align-items:center;gap:var(--esp-2);padding:var(--esp-1) 0;cursor:pointer}
 .permissao-item input{accent-color:var(--destaque);width:16px;height:16px}
+
+/* Histórico: quantidades por aba em letra menor */
+.tabela-historico .historico-abas{font-size:13px;color:var(--texto-fraco);min-width:260px}

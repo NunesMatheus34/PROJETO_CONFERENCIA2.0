@@ -75,8 +75,18 @@ async function confereCb(){
   if(meu !== telaCb.pedido) return;
   const r = conferirCodigoBarras(leitura);
   if(r.erro){ mostraErro(elCb('cbAlerta'), r.erro); recusaCaixaEnvio(elCb('cbCaixa')); return; }
+  const empresa = identificaEmpresa(leitura.matriz);
+  // permissão por empresa (js/login/permissoes.js): o adm confere qualquer relatório, até de
+  // empresa não reconhecida; os outros só relatório reconhecido de empresa que podem usar
+  if(!ehAdmCadastro(cadastroComPermissoes) && !empresaPermitida(empresa)){
+    mostraErro(elCb('cbAlerta'), empresa
+      ? `Este relatório é da ${empresa.nome}, e você não tem permissão para conferir essa empresa.`
+      : 'Não reconheci a empresa pela 1ª linha do relatório: sem saber a empresa, a conferência não é feita. Fale com o administrador.');
+    recusaCaixaEnvio(elCb('cbCaixa'));
+    return;
+  }
   telaCb.resultado = r;
-  telaCb.empresa = identificaEmpresa(leitura.matriz);
+  telaCb.empresa = empresa;
   mostraResultadoCb();
 }
 
@@ -96,7 +106,10 @@ function mostraResultadoCb(){
     area: elCb('cbArea'), status: STATUS_CB, colunas: COLUNAS_TELA_CB,
     soma: somaValores, busca: buscaCasa, vazio: MSG_VAZIO_CB,
   });
-  telaCb.desenho.mostra(linhasCodigoBarras(r));
+  const linhas = linhasCodigoBarras(r);
+  telaCb.desenho.mostra(linhas);
+  // histórico (só quantidades); relatório de empresa não reconhecida (só o adm chega aqui) não é registrado
+  if(telaCb.empresa) registraUso({ tela: 'codigo-barras', banco: '', empresa: telaCb.empresa, abas: quantidadesPorAba(STATUS_CB, linhas) });
   elCb('cbResultado').hidden = false;
   elCb('cbBaixar').disabled = false;
 }
@@ -242,7 +255,10 @@ function confereRr(){
     qtd: (n, st) => st.id === 'linha' ? qtdTitulos(n) : grupos(n),
     classeLinha: l => l.mesmoBoleto ? 'linha-alerta' : '',
   });
-  telaRr.desenho.mostra(linhasRelatorios(r));
+  const linhas = linhasRelatorios(r);
+  telaRr.desenho.mostra(linhas);
+  // histórico (só quantidades de grupos/títulos por aba)
+  registraUso({ tela: 'codigo-barras', banco: '', empresa: a.empresa, empresa2: b.empresa, abas: quantidadesPorAba(STATUS_RR, linhas) });
   elCb('rrResultado').hidden = false;
   mostraAlertasRr();
 }

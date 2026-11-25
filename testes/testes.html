@@ -88,6 +88,7 @@
 <script src="../js/leitura/sha256.js"></script>
 <script src="../js/empresas.js"></script>
 <script src="../js/login/permissoes.js"></script>
+<script src="../js/login/historico.js"></script>
 <script src="../js/bancos/itau.js"></script>
 <script src="../js/bancos/santander.js"></script>
 <script src="../js/bancos/bradesco.js"></script>
@@ -368,6 +369,32 @@ async function rodaTestes(){
                      permissoes: { telas: ['dda-ret'], empresas: ['crv-filial'] } };
     const c = conclusaoDeReset({ uid: 'n', login: 'x@conferencia.local', papel: 'usuario', status: 'aguardando' }, antigo);
     confere('Reset concluído volta com as mesmas permissões', c.libera.permissoes === antigo.permissoes, JSON.stringify(c));
+  });
+
+  await teste('Histórico: só quem, quando, tela, banco, empresa e quantidades', () => {
+    const quem = { uid: 'u1', login: 'fulano.de.tal@conferencia.local', nome: 'Fulano de Tal' };
+    const linhas = { ok: [{ fornecedor: 'FORNECEDOR FICTICIO LTDA', valor: 1234.56, codigo: '34191160800001234561234567891234567891234567' }],
+                     data: [], nome: [], banco: [{}, {}], sis: [] };
+    const abas = quantidadesPorAba(STATUS_DDA, linhas);
+    confere('Abas viram só quantidades', JSON.stringify(abas) === '{"ok":1,"data":0,"nome":0,"banco":2,"sis":0}', JSON.stringify(abas));
+    const empresa = EMPRESAS.find(e => e.id === 'crv-matriz');
+    const r = montaRegistroUso({ tela: 'conferencia-dda', banco: 'itau', empresa, abas,
+      fornecedor: 'FORNECEDOR FICTICIO LTDA', valor: 1234.56, codigo: '34191160800001234561234567891234567891234567' }, quem);
+    confere('Registro tem exatamente os campos permitidos (o resto do pedido é ignorado)',
+      Object.keys(r.registro).sort().join(',') === 'abas,banco,empresa,login,nome,tela,uid', Object.keys(r.registro).join(','));
+    const json = JSON.stringify(r.registro);
+    confere('Nenhum fornecedor, código ou valor no registro',
+      !/FORNECEDOR|1234[.,]56|34191160/.test(json), json);
+    confere('Empresa gravada como id', r.registro.empresa === 'crv-matriz');
+    confere('Valor em R$ numa aba: recusado', !!montaRegistroUso({ tela: 'conferencia-dda', banco: 'itau', empresa, abas: { ok: 1234.56 } }, quem).erro);
+    confere('Texto numa aba: recusado', !!montaRegistroUso({ tela: 'conferencia-dda', banco: 'itau', empresa, abas: { ok: 'FORNECEDOR' } }, quem).erro);
+    confere('Aba desconhecida: recusada', !!montaRegistroUso({ tela: 'conferencia-dda', banco: 'itau', empresa, abas: { fornecedor: 1 } }, quem).erro);
+    confere('Tela desconhecida: recusada', !!montaRegistroUso({ tela: 'usuarios', banco: '', empresa, abas: {} }, quem).erro);
+    confere('Empresa desconhecida: recusada', !!montaRegistroUso({ tela: 'codigo-barras', banco: '', empresa: null, abas: {} }, quem).erro);
+    const rr = montaRegistroUso({ tela: 'codigo-barras', banco: '', empresa, empresa2: EMPRESAS.find(e => e.id === 'crv-filial'), abas: { mesmo: 1, duplo: 0, linha: 3 } }, quem);
+    confere('Dois relatórios: grava empresa e empresa2', rr.registro.empresa === 'crv-matriz' && rr.registro.empresa2 === 'crv-filial', JSON.stringify(rr));
+    confere('Todas as abas das telas cabem no histórico',
+      [STATUS_DDA, STATUS_CB, STATUS_RR, ABAS_BOL].every(lista => lista.every(st => st.id in ABAS_HISTORICO)));
   });
 
   await teste('Adm › Usuários: ordem da lista', () => {

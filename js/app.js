@@ -43,7 +43,8 @@ const MENU = [
   { id: 'caixa',      grupo: 'Caixa',      icone: 'i-caixa',      telas: [] },
   { id: 'relatorios', grupo: 'Relatórios', icone: 'i-relatorios', telas: [] },
   { id: 'adm', grupo: 'Administração', icone: 'i-adm', soAdm: true, telas: [
-    { tela: 'usuarios', titulo: 'Usuários' },
+    { tela: 'usuarios',  titulo: 'Usuários' },
+    { tela: 'historico', titulo: 'Histórico' },
   ]},
 ];
 

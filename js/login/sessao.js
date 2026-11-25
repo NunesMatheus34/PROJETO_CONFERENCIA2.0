@@ -46,6 +46,7 @@ function liberaSite(cadastro){
   document.getElementById('usuarioNome').textContent = cadastro.nome || '';
   mostraPerfil(cadastro);
   ajustaTelaUsuarios(cadastro, firebaseConectado().auth.currentUser.uid);   // só o adm vê a Administração
+  ajustaTelaHistorico(cadastro);
   escondeEntrada();
   document.body.classList.remove('travado');
 }

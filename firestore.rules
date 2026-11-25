@@ -15,7 +15,12 @@
 //   (só o adm grava; sem o campo = nenhuma tela e nenhuma empresa; o adm vê tudo).
 // O "nome" é só o que a pessoa digitou; o "login" é conferido aqui contra o
 // e-mail da conta (request.auth.token.email), então é ele que diz quem é quem.
-// Coleção nova (histórico, controle do .RET...) só funciona depois de
+// historico/{id}: um registro por conferência feita ou .RET baixado, com
+//   uid, login, nome, quando, tela, banco, empresa (empresa2) e abas
+//   ({ idDaAba: quantidade inteira }). NUNCA fornecedor, código ou valor:
+//   as regras abaixo recusam qualquer outro campo e qualquer aba que não
+//   seja um número inteiro.
+// Coleção nova (controle do .RET...) só funciona depois de
 // ganhar regra própria aqui: o resto fica fechado (última regra).
 // =====================================================================
 rules_version = '2';
@@ -138,6 +143,68 @@ service cloud.firestore {
       allow delete: if ehAdm()
         && resource.data.get('resetPedido', false) == true
         && resource.data.status == 'bloqueado';
+    }
+
+    // ---------- historico/{id} ----------
+
+    // Cadastro de quem está pedindo (lido no servidor).
+    function meuCadastro() {
+      return get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data;
+    }
+
+    // O cadastro c pode usar a tela / a empresa? Adm: tudo. Os outros: só o que o adm marcou.
+    function podeTela(c, tela) {
+      return c.papel == 'adm' || tela in c.get('permissoes', {'telas': [], 'empresas': []}).get('telas', []);
+    }
+    function podeEmpresa(c, empresa) {
+      return c.papel == 'adm' || empresa in c.get('permissoes', {'telas': [], 'empresas': []}).get('empresas', []);
+    }
+
+    // Uma aba do registro: ausente, ou um inteiro de 0 a 100000 (nunca texto nem valor em R$).
+    function qtdOk(a, id) {
+      return !(id in a) || (a[id] is int && a[id] >= 0 && a[id] <= 100000);
+    }
+
+    // As abas conhecidas (as mesmas do ABAS_HISTORICO do js/login/historico.js), cada uma só número inteiro.
+    function abasValidas(a) {
+      return a is map
+        && a.keys().hasOnly(['ok', 'data', 'nome', 'banco', 'sis', 'valor', 'dup', 'mesmo', 'duplo', 'linha',
+                             'verif', 'sem', 'dda', 'noArquivo', 'fora', 'atencao'])
+        && qtdOk(a, 'ok') && qtdOk(a, 'data') && qtdOk(a, 'nome') && qtdOk(a, 'banco') && qtdOk(a, 'sis')
+        && qtdOk(a, 'valor') && qtdOk(a, 'dup') && qtdOk(a, 'mesmo') && qtdOk(a, 'duplo') && qtdOk(a, 'linha')
+        && qtdOk(a, 'verif') && qtdOk(a, 'sem') && qtdOk(a, 'dda') && qtdOk(a, 'noArquivo') && qtdOk(a, 'fora')
+        && qtdOk(a, 'atencao');
+    }
+
+    match /historico/{registro} {
+
+      // LER: só o adm (tela Administração › Histórico).
+      allow read: if ehAdm();
+
+      // CRIAR: quem está liberado, só em nome próprio (uid, login e nome do próprio
+      // cadastro), com a hora do servidor, só os campos da lista, tela e empresa(s)
+      // que ele tem permissão de usar, e as abas só com quantidades inteiras.
+      allow create: if logado()
+        && exists(/databases/$(database)/documents/usuarios/$(request.auth.uid))
+        && meuCadastro().status == 'liberado'
+        && request.resource.data.keys().hasOnly(['uid', 'login', 'nome', 'quando', 'tela', 'banco', 'empresa', 'empresa2', 'abas'])
+        && request.resource.data.keys().hasAll(['uid', 'login', 'nome', 'quando', 'tela', 'banco', 'empresa', 'abas'])
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.login == request.auth.token.email
+        && request.resource.data.nome == meuCadastro().nome
+        && request.resource.data.quando == request.time
+        && request.resource.data.tela in ['conferencia-dda', 'codigo-barras', 'conferencia-boletos', 'dda-ret']
+        && podeTela(meuCadastro(), request.resource.data.tela)
+        && request.resource.data.banco in ['santander', 'itau', 'bradesco', '']
+        && request.resource.data.empresa in ['crv-matriz', 'crv-filial', 'rubi-matriz', 'rubi-filial']
+        && podeEmpresa(meuCadastro(), request.resource.data.empresa)
+        && (!('empresa2' in request.resource.data)
+            || (request.resource.data.empresa2 in ['crv-matriz', 'crv-filial', 'rubi-matriz', 'rubi-filial']
+                && podeEmpresa(meuCadastro(), request.resource.data.empresa2)))
+        && abasValidas(request.resource.data.abas);
+
+      // EDITAR e APAGAR: ninguém, nem o adm (só pelo console do Firebase).
+      allow update, delete: if false;
     }
 
     // ---------- todo o resto ----------

@@ -656,6 +656,28 @@
       </div>
     </section>
 
+    <!-- ===================== HISTÓRICO (Administração) =====================
+         Só para o adm (as regras recusam a leitura para os outros). Desenhada pelo js/telas/historico.js. -->
+    <section class="tela" id="tela-historico" aria-labelledby="titulo-historico" hidden>
+      <header class="tela-cabecalho">
+        <p class="sobretitulo">Administração</p>
+        <h1 id="titulo-historico">Histórico</h1>
+        <p class="tela-descricao">Quem conferiu o quê: tela, banco, empresa e quantos itens em cada aba.
+           Nenhum fornecedor, código de barras ou valor é gravado.</p>
+      </header>
+      <p class="mensagem mensagem-alerta" id="historicoSemAcesso">Só o administrador vê esta tela.</p>
+      <div id="historicoArea" hidden>
+        <p class="mensagem" id="historicoMensagem" role="status" hidden></p>
+        <p class="usuarios-resumo" id="historicoResumo"></p>
+        <div class="tabela-caixa tabela-solta">
+          <table class="tabela tabela-historico">
+            <thead><tr><th class="num">Quando</th><th>Quem</th><th>Tela</th><th>Banco</th><th>Empresa</th><th>Quantidades por aba</th></tr></thead>
+            <tbody id="historicoCorpo"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
     <!-- ===================== PERFIL ===================== -->
     <section class="tela" id="tela-perfil" aria-labelledby="titulo-perfil" hidden>
       <header class="tela-cabecalho">
@@ -746,11 +768,13 @@
 <script src="js/login/firebase.js"></script>
 <script src="js/login/cadastro.js"></script>
 <script src="js/login/usuarios.js"></script>
+<script src="js/login/historico.js"></script>
 <script src="js/login/conta.js"></script>
 <script src="js/telas/entrada.js"></script>
 <script src="js/telas/perfil.js"></script>
 <script src="js/telas/confirmacao.js"></script>
 <script src="js/telas/usuarios.js"></script>
+<script src="js/telas/historico.js"></script>
 <script src="js/login/sessao.js"></script>
 </body>
 </html>

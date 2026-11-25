@@ -211,8 +211,11 @@ function mostraResultadoDda(){
     area: elDda('ddaArea'), status: STATUS_DDA, colunas: colunasTelaDda(banco),
     soma: somaValores, busca: buscaCasa, vazio: MSG_VAZIO_DDA,
   });
-  telaDda.desenho.mostra(linhasDda(telaDda.resultado));
+  const linhas = linhasDda(telaDda.resultado);
+  telaDda.desenho.mostra(linhas);
   elDda('ddaResultado').hidden = false;
+  // histórico: só quem, quando, tela, banco, empresa e QUANTAS linhas em cada aba
+  registraUso({ tela: 'conferencia-dda', banco, empresa: escolhaDda().empresa, abas: quantidadesPorAba(STATUS_DDA, linhas) });
   mostraAlertasDda();
 }
 

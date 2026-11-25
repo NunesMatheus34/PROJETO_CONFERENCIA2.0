@@ -89,6 +89,10 @@ async function confereBol(){
   telaBol.resultado = r;
   telaBol.aba = 'ok'; telaBol.busca = '';
   mostraResultadoBol();
+  // histórico: quantos títulos em cada aba (as mesmas contas dos cartões; sem total em R$)
+  const qtd = {};
+  ABAS_BOL.forEach(a => { qtd[a.id] = resumoAba(r.abas[a.id]).qtd; });
+  registraUso({ tela: 'conferencia-boletos', banco: 'itau', empresa, abas: qtd });
 }
 
 /* ---------- Resultado ---------- */
