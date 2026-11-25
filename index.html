@@ -72,9 +72,13 @@
      e "Bloqueado". Desenhada pelo js/telas/entrada.js; o fluxo é do js/login/sessao.js. -->
 <div class="entrada" id="entrada">
   <div class="entrada-caixa">
-    <div class="entrada-marca">
-      <span class="menu-marca-nome">Central Financeira</span>
-      <span class="menu-marca-empresas">CRV · Rubi</span>
+    <!-- a mesma marca do menu (ícone verde + nome), centralizada no cartão -->
+    <div class="marca entrada-marca">
+      <span class="marca-icone" aria-hidden="true"><svg class="ico"><use href="#i-marca"/></svg></span>
+      <span class="marca-textos">
+        <span class="menu-marca-nome">Central Financeira</span>
+        <span class="menu-marca-empresas">CRV · Rubi</span>
+      </span>
     </div>
 
     <!-- enquanto o Firebase responde se já existe login salvo neste navegador -->
@@ -133,6 +137,7 @@
 
 <!-- ícones usados no menu e nas caixas de envio -->
 <svg class="icones-ocultos" width="0" height="0" aria-hidden="true">
+  <symbol id="i-marca" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></symbol>
   <symbol id="i-dda" viewBox="0 0 24 24"><path d="M3 9.5 12 4l9 5.5M4.5 10v8M9 10v8M15 10v8M19.5 10v8M3 20.5h18"/></symbol>
   <symbol id="i-barras" viewBox="0 0 24 24"><path d="M4 5.5v13M7 5.5v13M10 5.5v13M13.5 5.5v13M16 5.5v13M20 5.5v13"/></symbol>
   <symbol id="i-boleto" viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="14" rx="1.5"/><path d="M6.5 8.5h6M6.5 15.5v-3M8.5 15.5v-3M10.5 15.5v-3M13 15.5v-3M15 15.5v-3M17.5 15.5v-3M15 8.5h2.5"/></symbol>
@@ -150,9 +155,12 @@
 <!-- Menu lateral: os grupos e as telas são montados pelo js/app.js a partir da lista MENU.
      Cada tela é um link #âncora (dá para abrir direto, e o Voltar funciona). -->
 <nav class="menu" id="menu" aria-label="Telas">
-  <div class="menu-marca">
-    <span class="menu-marca-nome">Central Financeira</span>
-    <span class="menu-marca-empresas">CRV · Rubi</span>
+  <div class="marca menu-marca">
+    <span class="marca-icone" aria-hidden="true"><svg class="ico"><use href="#i-marca"/></svg></span>
+    <span class="marca-textos">
+      <span class="menu-marca-nome">Central Financeira</span>
+      <span class="menu-marca-empresas">CRV · Rubi</span>
+    </span>
   </div>
   <div class="menu-lista" id="menuLista"></div>
   <!-- rodapé separado: Ajuda (entra pelo js/app.js), o usuário com o Perfil e o Sair

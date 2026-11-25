@@ -248,9 +248,9 @@
   width:100%;max-width:400px;background:var(--superficie);border:1px solid var(--borda);
   border-radius:var(--raio);padding:var(--esp-6) var(--esp-5);box-shadow:var(--sombra);
 }
-.entrada-marca{display:flex;flex-direction:column;margin-bottom:var(--esp-5)}
+.entrada-marca{justify-content:center;margin-bottom:var(--esp-5)}
 .entrada-carregando{color:var(--texto-fraco)}
-.abas-entrada{margin:0 0 var(--esp-5)}
+.abas-entrada{margin:0 0 var(--esp-5);overflow:visible} /* só 2 abas: sem barra de rolagem */
 .abas-entrada .aba{flex:1}
 .entrada-form{display:flex;flex-direction:column;gap:var(--esp-4)}
 .entrada-form .campo{min-width:0}
