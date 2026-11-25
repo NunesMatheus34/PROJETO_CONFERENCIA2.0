@@ -119,6 +119,13 @@
 .tabela-caixa{overflow-x:auto;background:var(--superficie);border:1px solid var(--borda);border-top:none;border-radius:0 0 var(--raio) var(--raio)}
 /* tabela sem abas em cima (DDA → .RET): borda e cantos completos */
 .tabela-caixa.tabela-solta{border-top:1px solid var(--borda);border-radius:var(--raio)}
+/* DDA → .RET: lista vermelha "Fora do arquivo" (um motivo por linha) e linha com aviso (borda amarela) */
+.lista-fora{margin-top:var(--esp-4)}
+.lista-fora-titulo{font-size:15px;font-weight:600;color:var(--alerta-texto);margin-bottom:var(--esp-2)}
+.lista-fora .tabela-caixa{border-color:var(--alerta-texto)}
+.tabela .motivo-fora{display:block;color:var(--alerta-texto);font-weight:500}
+.tabela .motivo-fora + .motivo-fora{margin-top:var(--esp-1)}
+.tabela tr.linha-aviso td:first-child{box-shadow:inset 4px 0 0 var(--aviso-texto)}
 .tabela .sub{display:block;font-size:12px;color:var(--texto-fraco);font-family:var(--fonte-texto)}
 .tabela .codigo{font-size:12px;word-break:break-all;min-width:200px}
 .tabela .sem-quebra{white-space:nowrap}

@@ -8,6 +8,9 @@
    checagens aparecem embaixo (verde, amarelo ou vermelho).
    Sub-etapa 2: com as entradas certas, mostra a contagem dos boletos lidos
    e a tabela SÓ DE LEITURA (nenhum campo editável).
+   Sub-etapa 3: o resultado das travas de cada boleto (quantos vão para o
+   arquivo), a lista vermelha "Fora do arquivo" com os motivos e a coluna
+   Situação na tabela.
    Trocar a empresa NÃO apaga os arquivos: as checagens são refeitas com a
    empresa nova. Nada na tela é editável; dado de arquivo vai por textContent.
    ===================================================================== */
@@ -93,38 +96,89 @@ function mostraChecagensRet(){
 }
 
 // Leitura dos boletos (só com as entradas certas): a contagem (verde ou vermelha, com as
-// páginas/linhas que não fecham), a observação do formato e a tabela só de leitura.
+// páginas/linhas que não fecham), a observação do formato, o resultado das travas de cada
+// boleto (sub-etapa 3), a lista vermelha "Fora do arquivo" e a tabela só de leitura.
 function mostraLeituraRet(pronto){
   telaRet.leitura = pronto ? leituraDdaRet(telaRet.dda) : null;
   const l = telaRet.leitura;
   elRet('retLeitura').hidden = !l;
-  if(!l){ elRet('retContagem').replaceChildren(); elRet('retTabela').replaceChildren(); return; }
+  telaRet.travas = l ? travasDdaRet(l.boletos) : null;
+  if(!l){ ['retContagem', 'retTravas', 'retFora', 'retTabela'].forEach(id => elRet(id).replaceChildren()); return; }
   const checagens = [{ tipo: l.contagem.ok ? 'ok' : 'alerta', titulo: l.contagem.ok ? 'Contagem dos boletos' : 'Contagem não fecha',
                        texto: l.contagem.texto, itens: l.contagem.onde }];
   l.observacoes.forEach(o => checagens.push({ tipo:'aviso', ...o }));
   elRet('retContagem').replaceChildren(...checagensDom(checagens));
+  const t = telaRet.travas;
+  elRet('retTravas').replaceChildren(...checagensDom(checagensTravasRet(t)));
+  elRet('retFora').replaceChildren(...(t.fora.length ? [listaForaRet(t)] : []));
   elRet('retInfo').textContent = `${l.boletos.length} boleto(s) lido(s) · total "Até Venc." ${brl(l.total)} · ` +
-    'tabela só de leitura: os boletos ainda não foram conferidos (travas na próxima sub-etapa).';
-  elRet('retTabela').replaceChildren(tabelaLeituraRet(l.boletos, l.total));
+    `${t.noArquivo.length} no arquivo (${brl(t.totalNoArquivo)}) · ${t.fora.length} fora do arquivo (${brl(t.totalFora)}) · tabela só de leitura.`;
+  elRet('retTabela').replaceChildren(tabelaLeituraRet(l.boletos, l.total, t));
 }
 
-// Tabela só de leitura dos boletos lidos, na ordem do DDA, com o total no rodapé.
-// Tudo por textContent (cria); o código aparece exatamente como veio no arquivo.
-function tabelaLeituraRet(boletos, total){
-  const cab = ['#', 'Beneficiário', 'CPF/CNPJ', 'Venc.', 'Nº Doc.', 'Até Venc.', 'A Pagar', 'Banco', 'Código de barras', 'Origem'];
+// As checagens das travas, para checagensDom: verde com quantos passaram, vermelha com
+// quantos ficaram fora (a lista com os motivos vem logo abaixo, em listaForaRet) e amarela
+// com os boletos do arquivo cujo vencimento do código é diferente do "Venc." do DDA.
+function checagensTravasRet(t){
+  const lista = [{ tipo:'ok', titulo:`No arquivo: ${t.noArquivo.length} boleto(s) · ${brl(t.totalNoArquivo)}`,
+    texto:'Passaram em todas as travas: código com 44 dígitos, DV geral, banco, valor ao centavo, ida e volta pela linha digitável e CPF/CNPJ do beneficiário.' }];
+  if(t.fora.length) lista.push({ tipo:'alerta', titulo:`Fora do arquivo: ${t.fora.length} boleto(s) · ${brl(t.totalFora)}`,
+    texto:'Estes boletos NÃO vão para o .RET: alguma trava não fechou (motivos na lista abaixo). Confira cada um direto no banco antes de pagar.' });
+  if(t.comAviso.length) lista.push({ tipo:'aviso', titulo:`Vencimento do código diferente do DDA: ${t.comAviso.length} boleto(s)`,
+    texto:'Vão para o arquivo, mas confira: o vencimento gravado no código não é o "Venc." do DDA (boleto prorrogado?).',
+    itens: t.comAviso.map(i => `${origemRet(i.boleto)}: ${i.boleto.beneficiario} · ${brl(i.boleto.valor)} · Venc. no DDA ${i.boleto.venc}, no código ${vencDoCodigoRet(i.boleto)}`) });
+  return lista;
+}
+
+// Vencimento gravado no código (fator), só para mostrar no aviso ('sem vencimento' se o fator é 0000).
+function vencDoCodigoRet(b){
+  return decodifica(soDigitos(b.codigoTexto)).venc || 'sem vencimento';
+}
+
+// De onde o boleto veio no arquivo do banco: "página N" (PDF) ou "linha N" (Excel).
+function origemRet(b){
+  return b.pagina ? `página ${b.pagina}` : `linha ${b.linhaExcel}`;
+}
+
+// Lista vermelha "Fora do arquivo": uma linha por boleto reprovado, com TODOS os motivos.
+function listaForaRet(t){
+  const cab = ['Origem', 'Beneficiário', 'CPF/CNPJ', 'Venc.', 'Até Venc.', 'Código de barras (como veio)', 'Motivo'];
+  const tabela = cria('table', 'tabela');
+  tabela.append(criaCom('thead', '', [criaCom('tr', '', cab.map(c => cria('th', c === 'Até Venc.' ? 'num' : '', c)))]));
+  tabela.append(criaCom('tbody', '', t.fora.map(i => criaCom('tr', 'linha-alerta', [
+    cria('td', 'sem-quebra', origemRet(i.boleto)), cria('td', '', i.boleto.beneficiario), cria('td', 'mono sem-quebra', i.boleto.cnpj),
+    cria('td', 'mono sem-quebra', i.boleto.venc), cria('td', 'num', brl(i.boleto.valor)), cria('td', 'mono codigo', i.boleto.codigoTexto),
+    criaCom('td', '', i.motivos.map(m => cria('span', 'motivo-fora', m))),
+  ]))));
+  return criaCom('div', 'lista-fora', [cria('h2', 'lista-fora-titulo', `Fora do arquivo (${t.fora.length})`),
+    criaCom('div', 'tabela-caixa tabela-solta', [tabela])]);
+}
+
+// Tabela só de leitura dos boletos lidos, na ordem do DDA, com a situação de cada um
+// (no arquivo / fora do arquivo, com o motivo) e o total no rodapé. Linha vermelha = fora;
+// borda amarela = no arquivo com aviso. Tudo por textContent (cria); o código aparece
+// exatamente como veio no arquivo.
+function tabelaLeituraRet(boletos, total, travas){
+  const cab = ['#', 'Situação', 'Beneficiário', 'CPF/CNPJ', 'Venc.', 'Nº Doc.', 'Até Venc.', 'A Pagar', 'Banco', 'Código de barras', 'Origem'];
   const num = new Set(['#', 'Até Venc.', 'A Pagar']);
+  const situacao = new Map([...travas.noArquivo, ...travas.fora].map(i => [i.boleto, i]));
   const tabela = cria('table', 'tabela');
   tabela.append(criaCom('thead', '', [criaCom('tr', '', cab.map(t => cria('th', num.has(t) ? 'num' : '', t)))]));
-  tabela.append(criaCom('tbody', '', boletos.map((b, i) => criaCom('tr', '', [
-    cria('td', 'num', String(i + 1)), cria('td', '', b.beneficiario), cria('td', 'mono sem-quebra', b.cnpj),
-    cria('td', 'mono sem-quebra', b.venc), cria('td', 'mono', b.doc), cria('td', 'num', brl(b.valor)),
-    cria('td', 'num', brl(b.valorAPagar)), cria('td', 'mono', b.banco), cria('td', 'mono codigo', b.codigoTexto),
-    cria('td', 'sem-quebra', b.pagina ? `página ${b.pagina}` : `linha ${b.linhaExcel}`),
-  ]))));
+  tabela.append(criaCom('tbody', '', boletos.map((b, i) => {
+    const s = situacao.get(b);
+    const classe = !s.ok ? 'linha-alerta' : s.avisos.length ? 'linha-aviso' : '';
+    return criaCom('tr', classe, [
+      cria('td', 'num', String(i + 1)),
+      cria('td', 'sem-quebra', s.ok ? (s.avisos.length ? '⚠ No arquivo' : '✓ No arquivo') : '✗ Fora do arquivo'),
+      cria('td', '', b.beneficiario), cria('td', 'mono sem-quebra', b.cnpj),
+      cria('td', 'mono sem-quebra', b.venc), cria('td', 'mono', b.doc), cria('td', 'num', brl(b.valor)),
+      cria('td', 'num', brl(b.valorAPagar)), cria('td', 'mono', b.banco), cria('td', 'mono codigo', b.codigoTexto),
+      cria('td', 'sem-quebra', origemRet(b)),
+    ]);
+  })));
   const pe = cria('tr');
-  pe.append(cria('td', '', ''), cria('td', '', `${boletos.length} boleto(s)`));
-  const totalTd = cria('td', 'num', brl(total)); totalTd.colSpan = 4;
-  pe.append(totalTd, cria('td', '', '')); pe.lastChild.colSpan = 4;
+  const vazio = n => { const td = cria('td', '', ''); td.colSpan = n; return td; };
+  pe.append(vazio(2), cria('td', '', `${boletos.length} boleto(s)`), vazio(3), cria('td', 'num', brl(total)), vazio(4));
   tabela.append(criaCom('tfoot', '', [pe]));
   return tabela;
 }

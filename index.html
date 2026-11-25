@@ -370,6 +370,9 @@
       <!-- leitura dos boletos (sub-etapa 2): contagem e a tabela SÓ DE LEITURA -->
       <div id="retLeitura" hidden>
         <div class="checagens" id="retContagem"></div>
+        <!-- travas de cada boleto (sub-etapa 3): resumo e a lista vermelha "Fora do arquivo" -->
+        <div class="checagens" id="retTravas"></div>
+        <div id="retFora"></div>
         <p class="info-resultado mono" id="retInfo"></p>
         <div class="tabela-caixa tabela-solta" id="retTabela"></div>
       </div>
@@ -482,6 +485,7 @@
 <script src="js/bancos/bradesco.js"></script>
 <script src="js/bancos/detecta.js"></script>
 <script src="js/boleto.js"></script>
+<script src="js/cpf-cnpj.js"></script>
 <script src="js/conferencias/dda.js"></script>
 <script src="js/conferencias/nomes.js"></script>
 <script src="js/conferencias/codigo-barras.js"></script>

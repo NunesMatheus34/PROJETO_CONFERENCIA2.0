@@ -10,9 +10,12 @@
    escolhida, ou PDF "Boletos Recebidos (DDA)", que não traz o CNPJ).
    Sub-etapa 2 (leitura): lê os boletos do Excel ou do PDF e confere a
    contagem (nenhum boleto pode sumir); se não fechar, bloqueia.
+   Sub-etapa 3 (travas): cada boleto só segue para o arquivo se passar em
+   todas as travas; o reprovado fica "Fora do arquivo" com o motivo.
    Só regras: a tela fica em js/telas/dda-ret.js.
-   Precisa de js/empresas.js, js/leitura/ret.js, js/bancos/itau.js,
-   js/conferencias/dda.js (checaDda) e js/conferencias/boletos.js (empresasBoletos).
+   Precisa de js/empresas.js, js/leitura/ret.js, js/bancos/itau.js, js/boleto.js,
+   js/cpf-cnpj.js, js/conferencias/dda.js (checaDda) e js/conferencias/boletos.js
+   (empresasBoletos e validaBoletoDda).
    ===================================================================== */
 
 // Empresas que podem gerar o .RET: as que têm conta no Itaú (as mesmas da Conferência de boletos).
@@ -167,4 +170,43 @@ function observacoesPdfRet(boletos){
 // Soma do "Até Venc." em centavos inteiros (sem erro de arredondamento), devolvida em reais.
 function somaAteVenc(boletos){
   return boletos.reduce((s, b) => s + Math.round((b.valor || 0) * 100), 0) / 100;
+}
+
+/* ---------------------------------------------------------------------
+   Sub-etapa 3: TRAVAS DE SEGURANÇA DE CADA BOLETO
+   Um boleto só segue para o arquivo se passar em TODAS:
+     a) o código veio com exatamente 44 dígitos (código de barras, não a
+        linha digitável; e, no Excel, gravado como texto);
+     b) DV geral (módulo 11), c) banco do código = coluna Banco,
+     d) valor do código = "Até Venc." ao centavo e e) ida e volta pela
+        linha digitável: as quatro pelo validaBoletoDda/validaBoleto, os
+        mesmos da Conferência de boletos;
+     f) CPF/CNPJ do beneficiário com DVs válidos (cpfCnpjValido).
+   Vencimento do código diferente do "Venc." do DDA NÃO bloqueia: vira
+   aviso. O reprovado vai para "Fora do arquivo" com TODOS os motivos.
+   --------------------------------------------------------------------- */
+
+// Passa um boleto lido pelas travas. Devolve { ok, motivos: [...], avisos: [...] }.
+// Junta todos os motivos (código e documento), para a pessoa ver tudo o que está errado de uma vez.
+function travasBoletoRet(b){
+  const motivos = [];
+  const v = validaBoletoDda(b);
+  const digitos = soDigitos(b.codigoTexto);
+  if(!v.ok) motivos.push(v.motivo);
+  else if(!digitos || digitos.length !== 44 || digitos !== v.cb)
+    motivos.push(`o DDA trouxe ${digitos ? digitos.length : 0} dígitos (linha digitável?): o arquivo só leva o código de barras de 44 dígitos exatamente como veio do banco`);
+  const doc = String(b.cnpj || '').trim();
+  if(!doc) motivos.push('sem CPF/CNPJ do beneficiário');
+  else if(!cpfCnpjValido(doc)) motivos.push(`CPF/CNPJ do beneficiário (${doc}) com dígito verificador inválido`);
+  return { ok: motivos.length === 0, motivos, avisos: motivos.length ? [] : v.avisos };
+}
+
+// Separa os boletos lidos em "no arquivo" e "fora do arquivo", na ordem do DDA.
+// Devolve { noArquivo, fora, comAviso, totalNoArquivo, totalFora }; cada item é
+// { boleto, motivos, avisos }. comAviso = os do arquivo com aviso (vencimento diferente).
+function travasDdaRet(boletos){
+  const itens = boletos.map(b => ({ boleto: b, ...travasBoletoRet(b) }));
+  const noArquivo = itens.filter(i => i.ok), fora = itens.filter(i => !i.ok);
+  return { noArquivo, fora, comAviso: noArquivo.filter(i => i.avisos.length),
+           totalNoArquivo: somaAteVenc(noArquivo.map(i => i.boleto)), totalFora: somaAteVenc(fora.map(i => i.boleto)) };
 }

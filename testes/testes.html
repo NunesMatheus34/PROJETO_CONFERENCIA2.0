@@ -89,6 +89,7 @@
 <script src="../js/bancos/bradesco.js"></script>
 <script src="../js/bancos/detecta.js"></script>
 <script src="../js/boleto.js"></script>
+<script src="../js/cpf-cnpj.js"></script>
 <script src="../js/conferencias/dda.js"></script>
 <script src="../js/conferencias/nomes.js"></script>
 <script src="../js/conferencias/codigo-barras.js"></script>
@@ -1251,6 +1252,71 @@ async function rodaTestes(){
     const falta = leituraDdaRet({ tipo:'excel', ...(await lerMatrizComTexto(excelFicticio(linhas))) });
     confere('Linha de boleto sem "Até Venc." → contagem não fecha, com o número da linha do Excel',
       !falta.contagem.ok && /: 6\.$/.test(falta.contagem.onde[0] || ''), falta.contagem.onde.join(' '));
+  });
+
+  await teste('CPF e CNPJ: dígitos verificadores', async () => {
+    confere('CNPJ fictício com DV certo (com e sem pontuação) → válido', cpfCnpjValido('11.222.333/0001-81') && cpfCnpjValido('11222333000181'));
+    confere('CPF fictício com DV certo → válido', cpfCnpjValido('123.456.789-09'));
+    confere('CNPJ e CPF com o último dígito trocado → inválidos', !cpfCnpjValido('11.222.333/0001-82') && !cpfCnpjValido('123.456.789-08'));
+    confere('Todos os dígitos iguais → inválido', !cpfCnpjValido('111.111.111-11') && !cpfCnpjValido('00.000.000/0000-00'));
+    confere('CNPJ alfanumérico (exemplo da Receita) → válido; com letra minúscula → inválido (nada é corrigido)',
+      cpfCnpjValido('12.ABC.345/01DE-35') && !cpfCnpjValido('12.abc.345/01de-35'));
+    confere('CNPJ que perdeu o zero da frente (13 dígitos), vazio ou com outro caractere → inválido',
+      !cpfCnpjValido('1222333000181') && !cpfCnpjValido('') && !cpfCnpjValido(null) && !cpfCnpjValido('11.222.333/0001-8X'));
+  });
+
+  await teste('DDA → .RET: travas de cada boleto', async () => {
+    const base = over => ({ ...boletoFicticio({ beneficiario:'ALFA FICTICIA LTDA', doc:'NF1', valor:160.00 }), cnpj:'11.222.333/0001-81', ...over });
+    const ok = base();
+    const rOk = travasBoletoRet(ok);
+    confere('Boleto certo → no arquivo, sem motivo e sem aviso', rOk.ok && !rOk.motivos.length && !rOk.avisos.length, rOk.motivos.join(' / '));
+
+    const cod1530 = codigoFicticio('341', '20/11/2026', 1530.00, 801);
+    const rValor = travasBoletoRet(base({ codigoTexto: cod1530, codigoBarras: cod1530 }));
+    confere('"Até Venc." R$ 160,00 com R$ 1.530,00 dentro do código → fora (o exemplo do prompt)',
+      !rValor.ok && /valor do código \(R\$\s1\.530,00\) diferente do "Até Venc\." no DDA \(R\$\s160,00\)/.test(rValor.motivos[0]), rValor.motivos.join(' / '));
+
+    const rBanco = travasBoletoRet(base({ banco:'237' }));
+    confere('Banco do código (341) diferente da coluna Banco (237) → fora', !rBanco.ok && /banco do código \(341\)/.test(rBanco.motivos[0]), rBanco.motivos.join(' / '));
+
+    const cb = ok.codigoTexto, dvTrocado = cb.slice(0, 4) + String((Number(cb[4]) + 1) % 10) + cb.slice(5);
+    const rDv = travasBoletoRet(base({ codigoTexto: dvTrocado }));
+    confere('DV geral trocado → fora', !rDv.ok && /módulo 11/.test(rDv.motivos[0]), rDv.motivos.join(' / '));
+
+    const linha47 = barrasParaLinha(cb);
+    const rLinha = travasBoletoRet(base({ codigoTexto: linha47 }));
+    confere('Linha digitável (47 dígitos) no lugar do código → fora: o arquivo só leva os 44 dígitos como vieram',
+      !rLinha.ok && /47 dígitos/.test(rLinha.motivos[0]), rLinha.motivos.join(' / '));
+
+    const rMetade = travasBoletoRet(base({ codigoTexto: cb.slice(0, 22) }));
+    confere('Só uma metade do código (22 dígitos, como no PDF com falha) → fora, sem completar nada',
+      !rMetade.ok && /22 dígitos/.test(rMetade.motivos[0]), rMetade.motivos.join(' / '));
+
+    const rNumero = travasBoletoRet(base({ codigoSuspeito:true }));
+    confere('Código gravado como número no Excel → fora', !rNumero.ok && /não está gravado como texto/.test(rNumero.motivos[0]), rNumero.motivos.join(' / '));
+
+    const rCnpj = travasBoletoRet(base({ cnpj:'11.222.333/0001-82' }));
+    confere('CNPJ do beneficiário com DV errado → fora', !rCnpj.ok && rCnpj.motivos[0] === 'CPF/CNPJ do beneficiário (11.222.333/0001-82) com dígito verificador inválido', rCnpj.motivos.join(' / '));
+    const rSemCnpj = travasBoletoRet(base({ cnpj:'' }));
+    confere('Sem CPF/CNPJ do beneficiário → fora', !rSemCnpj.ok && rSemCnpj.motivos[0] === 'sem CPF/CNPJ do beneficiário', rSemCnpj.motivos.join(' / '));
+    const rCpf = travasBoletoRet(base({ cnpj:'123.456.789-09' }));
+    confere('Beneficiário com CPF válido → no arquivo', rCpf.ok, rCpf.motivos.join(' / '));
+
+    const rDois = travasBoletoRet(base({ banco:'237', cnpj:'11.222.333/0001-82' }));
+    confere('Duas travas erradas → os dois motivos aparecem', !rDois.ok && rDois.motivos.length === 2, rDois.motivos.join(' / '));
+
+    const codOutraData = codigoFicticio('341', '30/11/2026', 160.00, 802);
+    const rVenc = travasBoletoRet(base({ codigoTexto: codOutraData, codigoBarras: codOutraData }));
+    confere('Vencimento do código diferente do "Venc." do DDA → no arquivo, só com aviso',
+      rVenc.ok && rVenc.avisos[0] === 'vencimento do código diferente do DDA (boleto prorrogado?)', rVenc.avisos.join(' / '));
+
+    const lista = [ok, base({ banco:'237' }), base({ codigoTexto: codOutraData, codigoBarras: codOutraData })];
+    const copia = JSON.stringify(lista);
+    const t = travasDdaRet(lista);
+    confere('Lista: 2 no arquivo (R$ 320,00), 1 fora (R$ 160,00), 1 com aviso, na ordem do DDA',
+      t.noArquivo.length === 2 && t.fora.length === 1 && t.comAviso.length === 1 && t.totalNoArquivo === 320 && t.totalFora === 160 &&
+      t.noArquivo[0].boleto === lista[0] && t.fora[0].boleto === lista[1], `${t.noArquivo.length}/${t.fora.length}/${t.comAviso.length}`);
+    confere('As travas não mudam nada do boleto (código, valor, vencimento, beneficiário)', JSON.stringify(lista) === copia);
   });
 
   mostraResultados();
