@@ -275,6 +275,7 @@ function iniciaApp(){
   iniciaTelaCodigoBarras();
   iniciaTelaBoletos();
   iniciaTelaRet();
+  iniciaVerificacaoRet();
 
   sincronizaTela();
 }

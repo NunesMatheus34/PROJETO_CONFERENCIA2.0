@@ -61,6 +61,8 @@ a{color:var(--destaque)}
 /* números, valores, datas e códigos: fonte mono com algarismos alinhados */
 .mono{font-family:var(--fonte-numeros);font-variant-numeric:tabular-nums}
 
+/* o <svg> com os ícones (symbol) fica fora do fluxo; antes era style= no HTML, que a CSP não deixa */
+.icones-ocultos{position:absolute}
 .ico{width:18px;height:18px;flex-shrink:0;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
 
 /* ---------- Menu lateral ---------- */

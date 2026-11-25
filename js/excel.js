@@ -78,9 +78,10 @@ async function montaExcel(abas){
   return wb.xlsx.writeBuffer();
 }
 
-// Baixa o conteúdo como arquivo .xlsx com o nome dado (sem passar por servidor).
-function baixaArquivo(conteudo, nomeArquivo){
-  const blob = new Blob([conteudo], { type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+// Baixa o conteúdo como arquivo com o nome dado (sem passar por servidor).
+// tipo = o tipo do arquivo; sem ele, .xlsx. O .RET vai como bytes ('application/octet-stream').
+function baixaArquivo(conteudo, nomeArquivo, tipo){
+  const blob = new Blob([conteudo], { type: tipo || 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url; a.download = nomeArquivo;
@@ -179,5 +180,42 @@ async function confereExcelBoletos(buffer, abas){
 async function excelBoletosConferido(abas){
   const conteudo = await planilhaBoletos(abas).xlsx.writeBuffer();
   const erros = await confereExcelBoletos(conteudo, abas);
+  return erros.length ? { erros } : { conteudo };
+}
+
+/* ---------------------------------------------------------------------
+   EXCEL DE CONFERÊNCIA DO DDA → .RET
+   As abas vêm de abasExcelRet (js/conferencias/excel-ret.js). Antes de
+   liberar o download, o arquivo gerado é lido de volta: cada aba tem que
+   estar lá, e cada célula de TEXTO (código, linha digitável, CPF/CNPJ,
+   SHA-256...) tem que voltar igual e como texto.
+   --------------------------------------------------------------------- */
+
+// Lê de volta o Excel gerado e compara as células de texto (fmt '@') com as abas.
+// Devolve a lista de diferenças (vazia = pode baixar).
+async function confereExcelRet(buffer, abas){
+  const wb = new ExcelJS.Workbook();
+  await wb.xlsx.load(buffer);
+  const erros = [];
+  abas.forEach(aba => {
+    const ws = wb.getWorksheet(aba.nome);
+    if(!ws){ erros.push(`a aba "${aba.nome}" não está no arquivo`); return; }
+    aba.linhas.forEach((vals, k) => {
+      const row = ws.getRow(k + 3);
+      aba.colunas.forEach((c, i) => {
+        if(c.fmt !== '@' || vals[i] === '' || vals[i] === null || vals[i] === undefined) return;
+        const lido = row.getCell(i + 1).value;
+        if(lido !== vals[i]) erros.push(`${aba.nome}, linha ${k + 3}, ${c.cab}: no Excel "${lido}" ≠ "${vals[i]}"`);
+      });
+    });
+  });
+  return erros;
+}
+
+// Gera o Excel de conferência do .RET e confere com as abas.
+// Devolve { conteudo } para baixar, ou { erros } (e aí o download NÃO pode acontecer).
+async function excelRetConferido(abas){
+  const conteudo = await montaExcel(abas);
+  const erros = await confereExcelRet(conteudo, abas);
   return erros.length ? { erros } : { conteudo };
 }

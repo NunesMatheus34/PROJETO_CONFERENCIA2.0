@@ -29,7 +29,9 @@
      do DDA → .RET (modelo .RET fictício, empresa fora do modelo, Excel de outra
      conta, PDF do Itaú e PDF de outro tipo) e a leitura dos boletos (PDF do
      Itaú fictício com metades do código, Nº Doc. quebrado, contagem diferente;
-     Excel com linha sem "Até Venc.").
+     Excel com linha sem "Até Venc.") e a prova do arquivo gerado (SHA-256,
+     releitura antes do download com arquivo editado de vários jeitos,
+     "Verificar um .RET" com DDA e sacador/avalista, Excel de conferência).
      ===================================================================== -->
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Testes da Conferência</title>
@@ -83,6 +85,7 @@
 <script src="../js/leitura/planilha.js"></script>
 <script src="../js/leitura/pdf.js"></script>
 <script src="../js/leitura/ret.js"></script>
+<script src="../js/leitura/sha256.js"></script>
 <script src="../js/empresas.js"></script>
 <script src="../js/bancos/itau.js"></script>
 <script src="../js/bancos/santander.js"></script>
@@ -100,6 +103,8 @@
 <script src="../js/conferencias/dda-ret.js"></script>
 <script src="../js/conferencias/dda-ret-alertas.js"></script>
 <script src="../js/conferencias/gera-ret.js"></script>
+<script src="../js/conferencias/confere-ret.js"></script>
+<script src="../js/conferencias/excel-ret.js"></script>
 <script src="../js/excel.js"></script>
 <script src="../js/telas/resultado.js"></script>
 <!-- só para as colunas da tabela (o destaque vermelho); a tela não é ligada aqui -->
@@ -1545,6 +1550,136 @@ async function rodaTestes(){
     } finally {
       if(guardado === null) localStorage.removeItem(CHAVE_CONTROLE_NSA); else localStorage.setItem(CHAVE_CONTROLE_NSA, guardado);
     }
+  });
+
+  await teste('DDA → .RET: SHA-256', async () => {
+    const abc = await sha256Hex(new TextEncoder().encode('abc'));
+    confere('SHA-256 de "abc" = o valor do padrão (FIPS 180-2)', abc === 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad', abc);
+    confere('Um byte diferente → outro SHA-256', (await sha256Hex(new TextEncoder().encode('abd'))) !== abc);
+    let recusou = false;
+    try{ bytesAsciiDoTexto('AÇÃO'); }catch(e){ recusou = true; }
+    confere('Texto com acento não vira bytes do .RET (erro em vez de trocar o caractere)', recusou && bytesAsciiDoTexto('A1 ').join() === '65,49,32');
+  });
+
+  // mesmo arquivo fictício do teste de geração: 4 boletos aprovados (b1..b4) e 1 reprovado
+  const cenarioRetFicticio = () => {
+    const b1 = { ...boletoFicticio({ beneficiario:'ALFA FICTICIA LTDA', doc:'88790/1', valor:1234.56, venc:'20/11/2026' }), cnpj:'11.222.333/0001-81' };
+    const b2 = { ...boletoFicticio({ beneficiario:'BETA FICTICIA ME', doc:'0', valor:99.90, venc:'19/11/2026', banco:'237', valorAPagar:50.00 }), cnpj:'123.456.789-09' };
+    const b3 = { ...boletoFicticio({ beneficiario:'GAMA FICTICIA', doc:'NF 2951', valor:10.00 }), cnpj:'11.222.333/0001-81' };
+    const b4 = { ...boletoFicticio({ beneficiario:'DELTA FICTICIA', doc:'4', valor:20.00 }), cnpj:'11.222.333/0001-81' };
+    const ruim = { ...boletoFicticio({ beneficiario:'FORA FICTICIA', doc:'5', valor:30.00 }), cnpj:'11.222.333/0001-82' };
+    const todos = [b1, ruim, b2, b3, b4];
+    const modelo = leModeloRet(modeloRetFicticio([crvMatriz, crvFilial]));
+    const travas = travasDdaRet(todos);
+    const leitura = { contagem:{ ok:true }, boletos: todos, total: somaAteVenc(todos) };
+    const agora = new Date(2026, 10, 25, 14, 30, 5);
+    const gera = teste => geraRet({ modelo, empresa: crvFilial, leitura, travas, nsa: 900001, agora, teste });
+    return { b1, b2, b3, b4, ruim, todos, modelo, travas, leitura, agora, gera };
+  };
+  // troca o texto de uma linha (índice de 0) a partir da posição (de 1) e devolve os bytes
+  const editaRet = (texto, linha, pos, novo) => {
+    const L = texto.split('\r\n');
+    L[linha] = L[linha].slice(0, pos - 1) + novo + L[linha].slice(pos - 1 + novo.length);
+    return textoParaBytes(L.join('\r\n'));
+  };
+  const outroDigito = d => String((Number(d) + 1) % 10);
+
+  await teste('DDA → .RET: releitura do arquivo antes do download', async () => {
+    const c = cenarioRetFicticio();
+    const t = c.gera(true);
+    const bytes = bytesAsciiDoTexto(t.texto);
+    const ctx = { modelo: c.modelo, empresa: crvFilial, nsa: 900001, boletos: t.boletos };
+    const p = provaRetGerado(bytes, ctx);
+    const falhas = r => r.itens.filter(i => !i.ok).map(i => i.titulo + ': ' + i.itens.join(' / ')).join(' | ');
+    confere('Arquivo gerado com 3 boletos → releitura OK, 5 itens verdes, 3 boletos e a soma certa (1.344,46)',
+      p.ok && p.itens.length === 5 && p.qtd === 3 && p.total === 1344.46, falhas(p) || `${p.qtd} · ${p.total}`);
+    const bloqueia = (b, titulo, x = ctx) => { const r = provaRetGerado(b, x); return !r.ok && r.itens.some(i => !i.ok && i.titulo === titulo); };
+
+    const g = t.linhas[2], pos = 18 + 30;
+    confere('Um dígito do código de barras trocado → download bloqueado (travas e DDA)',
+      bloqueia(editaRet(t.texto, 2, pos, outroDigito(g[pos - 1])), 'Travas de cada código') &&
+      bloqueia(editaRet(t.texto, 2, pos, outroDigito(g[pos - 1])), 'Cada boleto igual ao DDA'));
+    const valorNovo = editaRet(t.texto, 2, 130, outroDigito(g[129]));
+    confere('Valor do G trocado → bloqueado (valor do código ≠ arquivo, soma do trailer, DDA)',
+      bloqueia(valorNovo, 'Travas de cada código') && bloqueia(valorNovo, 'Estrutura do arquivo') && bloqueia(valorNovo, 'Cada boleto igual ao DDA'));
+    confere('Vencimento do G trocado → bloqueado (diferente do DDA)', bloqueia(editaRet(t.texto, 2, 108, '21'), 'Cada boleto igual ao DDA'));
+    confere('CNPJ do beneficiário trocado → bloqueado (DV e DDA)', bloqueia(editaRet(t.texto, 2, 77, outroDigito(g[76])), 'Travas de cada código'));
+    confere('Linha com 239 caracteres → bloqueado', bloqueia(textoParaBytes(t.texto.replace(/ \r\n/, '\r\n')), 'Estrutura do arquivo'));
+    confere('LF no lugar de CRLF → bloqueado', bloqueia(textoParaBytes(t.texto.replace(/\r\n/g, '\n')), 'Estrutura do arquivo'));
+    confere('Última linha sem CRLF → bloqueado', bloqueia(textoParaBytes(t.texto.slice(0, -2)), 'Estrutura do arquivo'));
+    const semH = t.linhas.filter((l, i) => i !== 3);
+    confere('Um H a menos → bloqueado (G sem H e trailers)', bloqueia(textoParaBytes(semH.join('\r\n') + '\r\n'), 'Estrutura do arquivo'));
+    confere('Sequencial do H trocado → bloqueado', bloqueia(editaRet(t.texto, 3, 9, '00009'), 'Estrutura do arquivo'));
+    confere('Trailer de arquivo com outra quantidade de linhas → bloqueado', bloqueia(editaRet(t.texto, 9, 24, '000011'), 'Estrutura do arquivo'));
+    confere('NSA diferente do escolhido → bloqueado', bloqueia(bytes, 'Empresa, headers e NSA', { ...ctx, nsa: 900002 }));
+    confere('Empresa diferente da do lote → bloqueado', bloqueia(bytes, 'Empresa, headers e NSA', { ...ctx, empresa: crvMatriz }));
+    confere('Boletos fora da ordem do DDA → bloqueado', bloqueia(bytes, 'Cada boleto igual ao DDA', { ...ctx, boletos: [c.b2, c.b1, c.b3] }));
+    confere('Um boleto a mais no DDA esperado → bloqueado', bloqueia(bytes, 'Cada boleto igual ao DDA', { ...ctx, boletos: [c.b1, c.b2, c.b3, c.b4] }));
+    confere('H com sacador/avalista → bloqueado (o site nunca grava sacador)', bloqueia(editaRet(t.texto, 3, 18, '2011222333000181'), 'Sem desconto nem sacador'));
+  });
+
+  await teste('DDA → .RET: "Verificar um .RET"', async () => {
+    const c = cenarioRetFicticio();
+    const t = c.gera(false);
+    const bytes = bytesAsciiDoTexto(t.texto);
+    const v = verificaRet(bytes, null);
+    confere('.RET gerado (4 boletos), sem DDA → nenhum erro', v.ok && v.qtd === 4 && v.total === 1364.46 && !v.comparou,
+      v.itens.filter(i => i.tipo === 'alerta').map(i => i.titulo).join(', '));
+    const g = t.linhas[2];
+    const dig = verificaRet(editaRet(t.texto, 2, 48, outroDigito(g[47])), null);
+    confere('.RET editado (um dígito do código) → acusa nas travas', !dig.ok && !dig.boletos[0].travas.ok && /módulo 11/.test(dig.boletos[0].travas.motivos.join()), dig.boletos[0].travas.motivos.join());
+    const val = verificaRet(editaRet(t.texto, 2, 130, outroDigito(g[129])), null);
+    confere('.RET editado (valor) → acusa (valor do código e soma do trailer)', !val.ok && !val.boletos[0].travas.ok && val.itens[0].tipo === 'alerta');
+
+    const ddaOk = { boletos: c.todos, empresaCnpj: '' };
+    const comDda = verificaRet(bytes, ddaOk);
+    confere('Com o DDA de origem → cada boleto igual, e o reprovado aparece como "não está no .RET"',
+      comDda.ok && comDda.comparou && comDda.semNoRet.length === 1 && comDda.semNoRet[0] === c.ruim);
+    const outroValor = verificaRet(bytes, { boletos: [{ ...c.b1, valor: 1234.57 }, c.b2, c.b3, c.b4], empresaCnpj: '' });
+    confere('DDA com outro valor → "diferente do DDA"', !outroValor.ok && outroValor.itens.some(i => i.titulo === 'Cada boleto igual ao DDA' && /valor/.test(i.itens.join())));
+    const falta = verificaRet(bytes, { boletos: [c.b1, c.b3, c.b4], empresaCnpj: '' });
+    confere('Boleto do .RET que não está no DDA → acusa', !falta.ok && falta.itens.some(i => /não está no DDA/.test(i.itens.join())));
+    const daMatriz = verificaRet(bytes, { boletos: c.todos, empresaCnpj: apenasDigitos(crvMatriz.cnpj) });
+    confere('Excel do DDA de outra empresa → acusa', !daMatriz.ok && daMatriz.itens.some(i => i.titulo === 'DDA de outra empresa'));
+
+    // sacador/avalista: H 18 = "2", 19-33 CNPJ, 34-73 nome (só o .RET do banco traz)
+    const outro = verificaRet(editaRet(t.texto, 3, 18, '2' + '012345678000195' + 'SACADOR FICTICIO SA'), null);
+    const sac = outro.itens.find(i => /Sacador/.test(i.titulo));
+    confere('H 18 = "2" com CNPJ diferente do beneficiário → alerta de sacador/avalista (amarelo, não bloqueia)',
+      outro.ok && sac.tipo === 'aviso' && /12\.345\.678\/0001-95/.test(outro.boletos[0].alertaSacador) && !outro.boletos[1].alertaSacador, sac && sac.titulo);
+    const mesmo = verificaRet(editaRet(t.texto, 3, 18, '2' + '011222333000181' + 'ALFA FICTICIA LTDA'), null);
+    confere('Sacador com o MESMO CNPJ do beneficiário → sem alerta', mesmo.ok && !mesmo.boletos[0].alertaSacador && mesmo.itens.find(i => /Sacador/.test(i.titulo)).tipo === 'ok');
+
+    const dois = verificaRet(modeloRetFicticio([crvMatriz, crvFilial]), null);
+    confere('.RET com 2 lotes (como o do banco) → lê os 2 lotes; trailers vazios acusam', dois.lotes.length === 2 && !dois.ok && dois.itens[0].itens.some(e => /trailer do lote 0001 diz/.test(e)), dois.itens[0].itens.slice(0, 2).join(' / '));
+    const pdfDois = verificaRet(modeloRetFicticio([crvMatriz, crvFilial]), { boletos: [], empresaCnpj: '' });
+    confere('PDF (sem CNPJ) com .RET de 2 lotes → comparação não feita, com o motivo', !pdfDois.comparou && pdfDois.itens.some(i => i.titulo === 'Comparação com o DDA não feita'));
+  });
+
+  await teste('DDA → .RET: Excel de conferência', async () => {
+    const c = cenarioRetFicticio();
+    const t = c.gera(true);
+    const alertas = alertasDdaRet(c.travas.noArquivo, memoriaVazia());
+    const abas = abasExcelRet({ gerado: t, travas: c.travas, alertas, empresa: crvFilial, nsa: 900001, agora: c.agora,
+      shaRet: 'a'.repeat(64), dda: { nome:'dda-ficticio.xlsx', sha256: 'b'.repeat(64) }, leitura: c.leitura });
+    confere('4 abas: Boletos no arquivo, Fora do arquivo, Atenção, Controle', abas.map(a => a.nome).join('|') === 'Boletos no arquivo|Fora do arquivo|Atenção|Controle');
+    const r = await excelRetConferido(abas);
+    confere('Excel lido de volta: todas as células de texto iguais', !!r.conteudo && !r.erros, (r.erros || []).join(' / '));
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(r.conteudo);
+    const ws = wb.getWorksheet('Boletos no arquivo');
+    const cod = ws.getRow(3).getCell(7), linha = ws.getRow(3).getCell(8);
+    confere('Código de barras e linha digitável como TEXTO (numFmt "@"), iguais ao DDA',
+      cod.value === c.b1.codigoTexto && cod.numFmt === '@' && linha.value === barrasParaLinha(c.b1.codigoTexto) && linha.numFmt === '@', `${typeof cod.value} ${cod.numFmt}`);
+    confere('Total na última linha (3 boletos, R$ 1.344,46)', ws.getRow(6).getCell(6).value === 1344.46 && /3 boleto/.test(ws.getRow(6).getCell(2).value));
+    const fora = wb.getWorksheet('Fora do arquivo').getRow(3);
+    confere('"Fora do arquivo" com o reprovado e o motivo', fora.getCell(2).value === 'FORA FICTICIA' && /dígito verificador/.test(fora.getCell(7).value), fora.getCell(7).value);
+    const at = wb.getWorksheet('Atenção');
+    confere('"Atenção" com o desconto do boleto que está no arquivo', at.getRow(3).getCell(1).value === 'Desconto ou abatimento' && at.getRow(3).getCell(3).value === 'BETA FICTICIA ME');
+    const ctl = wb.getWorksheet('Controle');
+    const valor = rot => { for(let i = 3; i <= ctl.rowCount; i++) if(ctl.getRow(i).getCell(1).value === rot) return ctl.getRow(i).getCell(2).value; return null; };
+    confere('"Controle" com NSA, quantidade, total e os dois SHA-256', valor('NSA') === '900001' && valor('Quantidade de boletos') === '3' &&
+      valor('SHA-256 do .RET') === 'a'.repeat(64) && valor('SHA-256 do DDA de origem') === 'b'.repeat(64) && valor('Data/hora da geração') === '25/11/2026 14:30:05');
   });
 
   mostraResultados();

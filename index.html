@@ -5,13 +5,17 @@
      é uma <section> que o menu mostra e esconde pelo #endereço.
      Planilhas são lidas só no navegador.
      Telas prontas: Conferência DDA (Santander, Itaú e Bradesco), Código de barras e Conferência de boletos;
-     DDA → .RET em construção (entradas prontas).
+     DDA → .RET em construção (geração, download e "Verificar um .RET" prontos).
      As outras chegam nas próximas etapas.
      ===================================================================== -->
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<!-- Content-Security-Policy: scripts só do próprio site e do cdnjs, estilos do site e do Google Fonts,
+     fontes do gstatic e connect-src 'none' (a página não conversa com servidor nenhum: os arquivos
+     são lidos só no navegador). Por isso não há script nem estilo dentro do HTML (style=, onclick=). -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' https://cdnjs.cloudflare.com; style-src 'self' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
 <title>Central Financeira</title>
 
 <!-- SheetJS (leitura de Excel no navegador): versão fixa + integrity (SRI) -->
@@ -46,7 +50,7 @@
 <body>
 
 <!-- ícones usados no menu e nas caixas de envio -->
-<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+<svg class="icones-ocultos" width="0" height="0" aria-hidden="true">
   <symbol id="i-dda" viewBox="0 0 24 24"><path d="M3 9.5 12 4l9 5.5M4.5 10v8M9 10v8M15 10v8M19.5 10v8M3 20.5h18"/></symbol>
   <symbol id="i-barras" viewBox="0 0 24 24"><path d="M4 5.5v13M7 5.5v13M10 5.5v13M13.5 5.5v13M16 5.5v13M20 5.5v13"/></symbol>
   <symbol id="i-boleto" viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="14" rx="1.5"/><path d="M6.5 8.5h6M6.5 15.5v-3M8.5 15.5v-3M10.5 15.5v-3M13 15.5v-3M15 15.5v-3M17.5 15.5v-3M15 8.5h2.5"/></symbol>
@@ -397,6 +401,32 @@
         <p class="info-resultado mono" id="retInfo"></p>
         <div class="tabela-caixa tabela-solta" id="retTabela"></div>
       </div>
+      <!-- "Verificar um .RET" (sub-etapa 6, js/telas/verifica-ret.js): não depende da empresa nem do DDA acima -->
+      <div class="bloco-gerar" id="retVerificar">
+        <h2 class="bloco-gerar-titulo">Verificar um .RET</h2>
+        <p class="lista-novos-texto">Antes de importar no sistema: envie o .RET (gerado aqui ou vindo do banco) e, se quiser, o DDA de origem.
+          O site refaz todas as conferências e mostra o SHA-256, para comparar com o da aba Controle do Excel de conferência.</p>
+        <div class="envios">
+          <label class="caixa-envio" id="verCaixaRet">
+            <input type="file" class="caixa-envio-input" accept=".ret,.RET">
+            <svg class="ico" aria-hidden="true"><use href="#i-arquivo"/></svg>
+            <span class="caixa-envio-titulo">.RET para verificar</span>
+            <span class="caixa-envio-dica">Gerado pelo site ou vindo do banco. Nada é alterado nem guardado.</span>
+            <span class="caixa-envio-arquivo">Nenhum arquivo escolhido</span>
+          </label>
+          <label class="caixa-envio" id="verCaixaDda">
+            <input type="file" class="caixa-envio-input" accept=".xlsx,.xls,.pdf">
+            <svg class="ico" aria-hidden="true"><use href="#i-arquivo"/></svg>
+            <span class="caixa-envio-titulo">DDA de origem (opcional)</span>
+            <span class="caixa-envio-dica">Excel ou PDF do Itaú: cada boleto do .RET é comparado com ele.</span>
+            <span class="caixa-envio-arquivo">Nenhum arquivo escolhido (opcional)</span>
+          </label>
+        </div>
+        <div class="acoes acoes-verificar">
+          <button type="button" class="botao" id="verLimpar">Limpar</button>
+        </div>
+        <div id="verResultado" aria-live="polite"></div>
+      </div>
     </section>
 
     <!-- ===================== AJUDA ===================== -->
@@ -500,6 +530,7 @@
 <script src="js/leitura/mensagens.js"></script>
 <script src="js/leitura/pdf.js"></script>
 <script src="js/leitura/ret.js"></script>
+<script src="js/leitura/sha256.js"></script>
 <script src="js/empresas.js"></script>
 <script src="js/bancos/itau.js"></script>
 <script src="js/bancos/santander.js"></script>
@@ -517,6 +548,8 @@
 <script src="js/conferencias/dda-ret.js"></script>
 <script src="js/conferencias/dda-ret-alertas.js"></script>
 <script src="js/conferencias/gera-ret.js"></script>
+<script src="js/conferencias/confere-ret.js"></script>
+<script src="js/conferencias/excel-ret.js"></script>
 <script src="js/excel.js"></script>
 <script src="js/telas/resultado.js"></script>
 <script src="js/telas/dda-bradesco.js"></script>
@@ -524,6 +557,7 @@
 <script src="js/telas/codigo-barras.js"></script>
 <script src="js/telas/boletos.js"></script>
 <script src="js/telas/dda-ret.js"></script>
+<script src="js/telas/verifica-ret.js"></script>
 <script src="js/app.js"></script>
 </body>
 </html>

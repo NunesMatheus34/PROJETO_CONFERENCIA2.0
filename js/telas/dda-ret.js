@@ -15,10 +15,14 @@
    fraude) e a lista de fornecedores novos, com "Confirmei com o fornecedor".
    A memória de fornecedores é lida e gravada SÓ por js/memoria-fornecedores.js.
    Sub-etapa 5: o NSA (único campo digitável da tela), "Gerar teste (3
-   boletos)" e "Gerar completo". Gerar só MOSTRA o arquivo montado: o
-   download (e o NSA marcado como usado) vem na sub-etapa 6, depois da
-   releitura do arquivo. Os botões ficam travados se a contagem não fecha,
-   se nenhum boleto passou nas travas ou se o NSA não serve.
+   boletos)" e "Gerar completo". Os botões ficam travados se a contagem
+   não fecha, se nenhum boleto passou nas travas ou se o NSA não serve.
+   Sub-etapa 6: depois de gerar, os bytes do arquivo são relidos por um
+   leitor independente (provaRetGerado, js/conferencias/confere-ret.js) e
+   o SHA-256 do .RET e do DDA de origem aparecem na tela. Só com TODOS os
+   itens da prova verdes aparecem "Baixar .RET" (que marca o NSA como
+   usado) e "Baixar Excel de conferência". O "Verificar um .RET" fica em
+   js/telas/verifica-ret.js.
    Trocar a empresa NÃO apaga os arquivos: as checagens são refeitas com a
    empresa nova. Nada na tela é editável; dado de arquivo vai por textContent.
    ===================================================================== */
@@ -29,9 +33,10 @@ const elRet = id => document.getElementById(id);
 // Estado da tela: empresa escolhida, modelo lido, DDA lido e a memória de fornecedores.
 // pedido: número da última leitura pedida por caixa (leitura antiga que termina depois é descartada).
 // fechaConfirmacao: fecha a confirmação "Você vai gravar..." aberta (só uma por vez).
-// controleNsa: os NSAs já usados (js/controle-nsa.js); gerado: o último arquivo montado (só para ver).
+// controleNsa: os NSAs já usados (js/controle-nsa.js); gerado: o último arquivo montado, com os
+// bytes, a prova e o SHA-256 (liberado = pode baixar; baixado = o .RET já foi baixado).
 const telaRet = { empresa:null, modelo:null, dda:null, memoria:null, fechaConfirmacao:null, controleNsa:null, gerado:null,
-                  pedido:{ modelo:0, dda:0 } };
+                  pedido:{ modelo:0, dda:0, gerar:0 } };
 
 // Põe no seletor só as empresas com Itaú (com "Escolha a empresa" no começo).
 function preencheEmpresasRet(){
@@ -78,16 +83,27 @@ async function recebeModeloRet(arquivo){
   mostraChecagensRet();
 }
 
-// DDA escolhido: PDF pelo pdf.js, Excel pelo SheetJS (o tipo sai da extensão do arquivo).
-async function recebeDdaRet(arquivo){
-  const meu = ++telaRet.pedido.dda;
-  telaRet.dda = null; mostraChecagensRet();
+// Lê um arquivo de DDA do Itaú: PDF pelo pdf.js, Excel pelo SheetJS (o tipo sai da extensão).
+// Junta o nome e o SHA-256 dos bytes do arquivo (erroSha se o navegador não calcular).
+// Usada aqui e no "Verificar um .RET" (js/telas/verifica-ret.js).
+async function leArquivoDdaRet(arquivo){
   let dda;
   try{
     if(/\.pdf$/i.test(arquivo.name)) dda = { tipo:'pdf', pdf: await lerPalavrasPdf(arquivo) };
     else if(/\.xlsx?$/i.test(arquivo.name)) dda = { tipo:'excel', ...(await lerMatrizComTexto(arquivo)) };
-    else dda = { erro:'Envie o DDA em Excel (.xlsx ou .xls) ou em PDF.' };
-  }catch(err){ dda = { erro:'Não consegui ler o arquivo: ' + (err.message || err) }; }
+    else return { erro:'Envie o DDA em Excel (.xlsx ou .xls) ou em PDF.' };
+  }catch(err){ return { erro:'Não consegui ler o arquivo: ' + (err.message || err) }; }
+  dda.nome = arquivo.name;
+  try{ dda.sha256 = await sha256DoArquivo(arquivo); }
+  catch(err){ dda.erroSha = err.message || String(err); }
+  return dda;
+}
+
+// DDA escolhido: lê (leArquivoDdaRet) e refaz as checagens.
+async function recebeDdaRet(arquivo){
+  const meu = ++telaRet.pedido.dda;
+  telaRet.dda = null; mostraChecagensRet();
+  const dda = await leArquivoDdaRet(arquivo);
   if(meu !== telaRet.pedido.dda) return;
   telaRet.dda = dda;
   mostraChecagensRet();
@@ -115,8 +131,7 @@ function mostraLeituraRet(pronto){
   const l = telaRet.leitura;
   elRet('retLeitura').hidden = !l;
   telaRet.travas = l ? travasDdaRet(l.boletos) : null;
-  telaRet.gerado = null;
-  elRet('retGerado').replaceChildren();
+  limpaGeradoRet();
   atualizaGerarRet();
   if(!l){
     telaRet.alertas = null;
@@ -344,26 +359,119 @@ function atualizaGerarRet(){
   else mostraMensagem(elRet('retGerarAviso'), pode.ok ? 'aviso' : 'alerta', 'Geração travada: ' + (pode.ok ? nsa.motivo : pode.motivo));
 }
 
-// Monta o .RET (teste = só os 3 primeiros boletos aprovados) e MOSTRA: nome, quantidade,
-// total, linhas e o texto do arquivo. Não baixa nada nem gasta o NSA (isso é na sub-etapa 6).
-function gerarRet(teste){
+// Esquece o arquivo montado (empresa, DDA, NSA ou leitura mudaram): some a prova e os downloads.
+function limpaGeradoRet(){
+  telaRet.pedido.gerar++;
+  telaRet.gerado = null;
+  elRet('retGerado').replaceChildren();
+}
+
+// Monta o .RET (teste = só os 3 primeiros boletos aprovados), relê os BYTES que vão ser
+// baixados com o leitor independente (provaRetGerado) e calcula o SHA-256 do .RET.
+// Só libera os downloads se todos os itens da prova passarem e os dois SHA-256 existirem.
+async function gerarRet(teste){
   const nsa = checaNsa(elRet('retNsa').value, telaRet.controleNsa || controleNsaVazio());
   if(!nsa.ok){ atualizaGerarRet(); return; }
+  limpaGeradoRet();
+  limpaMensagem(elRet('retGerarAviso'));
+  const meu = telaRet.pedido.gerar;
+  const agora = new Date();
   const r = geraRet({ modelo: telaRet.modelo, empresa: telaRet.empresa, leitura: telaRet.leitura, travas: telaRet.travas,
-                      nsa: nsa.nsa, agora: new Date(), teste });
-  telaRet.gerado = r.bloqueio ? null : r;
-  if(r.bloqueio){
-    mostraMensagem(elRet('retGerarAviso'), 'alerta', r.bloqueio);
-    elRet('retGerado').replaceChildren();
+                      nsa: nsa.nsa, agora, teste });
+  if(r.bloqueio){ mostraMensagem(elRet('retGerarAviso'), 'alerta', r.bloqueio); return; }
+  let bytes = null, prova, sha = '', erroSha = '';
+  try{
+    bytes = bytesAsciiDoTexto(r.texto);
+    prova = provaRetGerado(bytes, { modelo: telaRet.modelo, empresa: telaRet.empresa, nsa: nsa.nsa, boletos: r.boletos });
+  }catch(err){
+    prova = { ok:false, itens:[{ ok:false, titulo:'Releitura do arquivo', texto:'Não consegui reler o arquivo: ' + (err.message || err), itens:[] }] };
+  }
+  if(bytes){
+    try{ sha = await sha256Hex(bytes); }catch(err){ erroSha = err.message || String(err); }
+  }
+  if(meu !== telaRet.pedido.gerar) return;
+  const dda = telaRet.dda;
+  const liberado = prova.ok && !!sha && !!dda.sha256;
+  telaRet.gerado = { ...r, bytes, prova, sha, erroSha, nsa: nsa.nsa, agora, teste, empresa: telaRet.empresa, liberado, baixado:false };
+  mostraGeradoRet();
+}
+
+// Desenha o arquivo montado: o veredito, cada item da prova (verde ou vermelho), os dois
+// SHA-256, os botões de download (só se liberado) e o texto do arquivo.
+function mostraGeradoRet(){
+  const g = telaRet.gerado, dda = telaRet.dda;
+  const nsa6 = String(g.nsa).padStart(6, '0');
+  const resumo = `${g.nomeArquivo} · ${g.qtdBoletos} boleto(s) · total "Até Venc." ${brl(g.total)} · ${g.linhas.length} linhas de 240 caracteres · NSA ${nsa6}`;
+  const semSha = !g.sha ? `Não deu para calcular o SHA-256 do .RET (${g.erroSha || 'erro desconhecido'}).` :
+                 !dda.sha256 ? `Não deu para calcular o SHA-256 do DDA (${dda.erroSha || 'erro desconhecido'}).` : '';
+  const veredito = g.liberado
+    ? { tipo:'ok', titulo: (g.teste ? 'Arquivo de teste' : 'Arquivo completo') + ' conferido: download liberado', texto: resumo }
+    : { tipo:'alerta', titulo:'Download BLOQUEADO', texto: (g.prova.ok ? semSha : 'O arquivo lido de volta não passou em todos os itens abaixo. Nada foi baixado e o NSA não foi gasto.') + ' ' + resumo };
+  const itens = g.prova.itens.map(i => ({ tipo: i.ok ? 'ok' : 'alerta', titulo: i.titulo, texto: i.texto, itens: i.itens }));
+  const linhaSha = (rotulo, valor) => criaCom('p', 'sha-linha', [cria('span', 'sha-rotulo', rotulo), cria('span', 'mono sha-valor', valor || '—')]);
+  const filhos = [
+    ...checagensDom([veredito]),
+    criaCom('div', 'checagens', checagensDom(itens)),
+    criaCom('div', 'sha-caixa', [
+      cria('p', 'sha-titulo', 'SHA-256 (impressão digital: qualquer alteração no arquivo muda este número)'),
+      linhaSha(`.RET (${g.nomeArquivo})`, g.sha),
+      linhaSha(`DDA de origem (${dda.nome})`, dda.sha256),
+    ]),
+  ];
+  if(g.liberado){
+    const baixarRet = cria('button', 'botao botao-principal', g.baixado ? '✓ .RET baixado' : 'Baixar .RET');
+    const baixarExcel = cria('button', 'botao', 'Baixar Excel de conferência');
+    baixarRet.type = baixarExcel.type = 'button';
+    baixarRet.id = 'retBaixarRet'; baixarExcel.id = 'retBaixarExcel';
+    baixarRet.disabled = g.baixado;
+    baixarRet.addEventListener('click', baixaRetGerado);
+    baixarExcel.addEventListener('click', baixaExcelRet);
+    filhos.push(criaCom('div', 'acoes', [baixarRet, baixarExcel]),
+      cria('p', 'lista-novos-texto', `Baixar o .RET marca o NSA ${nsa6} como usado neste computador. Guarde o Excel de conferência: a aba Controle tem os dois SHA-256.`));
+  }
+  const aviso = cria('div', 'mensagem'); aviso.id = 'retBaixarAviso'; aviso.setAttribute('role', 'status'); aviso.hidden = true;
+  filhos.push(aviso, cria('pre', 'arquivo-gerado-previa mono', g.linhas.join('\n')));
+  elRet('retGerado').replaceChildren(criaCom('div', 'arquivo-gerado', filhos));
+}
+
+// Baixa o .RET: confere de novo que o NSA não foi usado (outra aba pode ter baixado) e que os
+// bytes são os mesmos do SHA-256 mostrado, marca o NSA como usado e só então baixa.
+// Se não der para marcar o NSA, NÃO baixa (o número poderia se repetir).
+async function baixaRetGerado(){
+  const g = telaRet.gerado;
+  if(!g || !g.liberado || g.baixado) return;
+  const botao = elRet('retBaixarRet'), aviso = elRet('retBaixarAviso');
+  botao.disabled = true;
+  const nsa = checaNsa(String(g.nsa), await lerControleNsa());
+  if(telaRet.gerado !== g) return;
+  if(!nsa.ok){ mostraMensagem(aviso, 'alerta', nsa.motivo + ' Gere o arquivo de novo com outro NSA.'); return; }
+  if(await sha256Hex(g.bytes) !== g.sha){ mostraMensagem(aviso, 'alerta', 'O arquivo na memória não tem mais o SHA-256 mostrado: gere de novo.'); return; }
+  const gravado = await gravarNsaUsado(g.nsa);
+  if(!gravado){
+    mostraMensagem(aviso, 'alerta', 'Não consegui marcar o NSA como usado neste navegador: download bloqueado (o NSA poderia se repetir).');
+    botao.disabled = false;
     return;
   }
-  const resumo = `${r.nomeArquivo} · ${r.qtdBoletos} boleto(s) · total "Até Venc." ${brl(r.total)} · ${r.linhas.length} linhas de 240 caracteres · NSA ${String(nsa.nsa).padStart(6, '0')}`;
-  elRet('retGerado').replaceChildren(criaCom('div', 'arquivo-gerado', [
-    ...checagensDom([{ tipo:'ok', titulo: teste ? 'Arquivo de teste montado' : 'Arquivo completo montado', texto: resumo }]),
-    cria('p', 'lista-novos-texto', 'Só para conferir: o download fica liberado na próxima sub-etapa, depois que o site reler o próprio arquivo, ' +
-      'conferir boleto por boleto contra o DDA e calcular o SHA-256. O NSA só é marcado como usado no download.'),
-    cria('pre', 'arquivo-gerado-previa mono', r.linhas.join('\n')),
-  ]));
+  telaRet.controleNsa = gravado;
+  baixaArquivo(g.bytes, g.nomeArquivo, 'application/octet-stream');
+  g.baixado = true;
+  botao.textContent = '✓ .RET baixado';
+  elRet('retNsa').value = String(proximoNsa(gravado));
+  atualizaGerarRet();
+  mostraMensagem(aviso, 'ok', `${g.nomeArquivo} baixado. NSA ${String(g.nsa).padStart(6, '0')} marcado como usado; o próximo sugerido é ${proximoNsa(gravado)}.`);
+}
+
+// Baixa o Excel de conferência (4 abas), depois de lê-lo de volta (excelRetConferido).
+async function baixaExcelRet(){
+  const g = telaRet.gerado;
+  if(!g || !g.liberado) return;
+  const aviso = elRet('retBaixarAviso');
+  const abas = abasExcelRet({ gerado: g, travas: telaRet.travas, alertas: telaRet.alertas, empresa: g.empresa, nsa: g.nsa,
+                              agora: g.agora, shaRet: g.sha, dda: { nome: telaRet.dda.nome, sha256: telaRet.dda.sha256 }, leitura: telaRet.leitura });
+  const r = await excelRetConferido(abas);
+  if(telaRet.gerado !== g) return;
+  if(r.erros){ mostraMensagem(aviso, 'alerta', 'O Excel lido de volta não bate com a tela; download bloqueado: ' + r.erros.slice(0, 3).join(' · ')); return; }
+  baixaArquivo(r.conteudo, g.nomeArquivo.replace(/\.RET$/, '_CONFERENCIA.xlsx'));
 }
 
 // Liga o seletor, as duas caixas e o botão Recomeçar, e lê a memória de fornecedores.
@@ -372,7 +480,7 @@ function iniciaTelaRet(){
   preencheEmpresasRet();
   telaRet.memoria = memoriaVazia();
   lerMemoriaFornecedores().then(m => { telaRet.memoria = m; mostraResumoMemoriaRet(); mostraAlertasRet(); });
-  elRet('retNsa').addEventListener('input', () => { telaRet.gerado = null; elRet('retGerado').replaceChildren(); atualizaGerarRet(); });
+  elRet('retNsa').addEventListener('input', () => { limpaGeradoRet(); atualizaGerarRet(); });
   elRet('retGerarTeste').addEventListener('click', () => gerarRet(true));
   elRet('retGerarCompleto').addEventListener('click', () => gerarRet(false));
   lerControleNsa().then(c => {
