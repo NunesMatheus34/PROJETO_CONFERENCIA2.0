@@ -91,6 +91,7 @@
 <script src="../js/boleto.js"></script>
 <script src="../js/cpf-cnpj.js"></script>
 <script src="../js/memoria-fornecedores.js"></script>
+<script src="../js/controle-nsa.js"></script>
 <script src="../js/conferencias/dda.js"></script>
 <script src="../js/conferencias/nomes.js"></script>
 <script src="../js/conferencias/codigo-barras.js"></script>
@@ -98,6 +99,7 @@
 <script src="../js/conferencias/boletos.js"></script>
 <script src="../js/conferencias/dda-ret.js"></script>
 <script src="../js/conferencias/dda-ret-alertas.js"></script>
+<script src="../js/conferencias/gera-ret.js"></script>
 <script src="../js/excel.js"></script>
 <script src="../js/telas/resultado.js"></script>
 <!-- só para as colunas da tabela (o destaque vermelho); a tela não é ligada aqui -->
@@ -1448,6 +1450,101 @@ async function rodaTestes(){
     confere('Depois do "Confirmei todos": os 4 com alerta continuam na lista de novos, para confirmar um por um',
       Object.keys(m.fornecedores).length === 1 && depois.novos.length === 4 && novosSemAlerta(depois.novos).length === 0,
       depois.novos.map(n => n.nome).join(', '));
+  });
+
+  await teste('DDA → .RET: geração do arquivo (CNAB 240)', async () => {
+    const modelo = leModeloRet(modeloRetFicticio([crvMatriz, crvFilial]));
+    const b1 = { ...boletoFicticio({ beneficiario:'Ação & Cia. Fictícia-Peças Ltda', doc:'88790/1', valor:1234.56, venc:'20/11/2026' }), cnpj:'11.222.333/0001-81' };
+    const b2 = { ...boletoFicticio({ beneficiario:'BETA FICTICIA ME', doc:'0', valor:99.90, venc:'19/11/2026', banco:'237', valorAPagar:50.00 }), cnpj:'123.456.789-09' };
+    const b3 = { ...boletoFicticio({ beneficiario:'GAMA FICTICIA', doc:'nf 00002951-651001', valor:10.00 }), cnpj:'11.222.333/0001-81' };
+    const b4 = { ...boletoFicticio({ beneficiario:'DELTA FICTICIA', doc:'4', valor:20.00 }), cnpj:'11.222.333/0001-81' };
+    const ruim = { ...boletoFicticio({ beneficiario:'FORA FICTICIA', doc:'5', valor:30.00 }), cnpj:'11.222.333/0001-82' };
+    const travas = travasDdaRet([b1, ruim, b2, b3, b4]);
+    const leitura = { contagem:{ ok:true } };
+    const agora = new Date(2026, 10, 25, 14, 30, 5);
+    const gera = (over = {}) => geraRet({ modelo, empresa: crvFilial, leitura, travas, nsa: 900001, agora, teste: true, ...over });
+
+    const t = gera();
+    const L = t.linhas || [];
+    confere('Teste com 3 boletos → 10 linhas (2 headers, 3 G + 3 H, 2 trailers)', !t.bloqueio && L.length === 10 && t.qtdBoletos === 3, t.bloqueio || String(L.length));
+    confere('Todas as linhas com exatamente 240 caracteres, só ASCII visível e sem minúsculas',
+      L.every(l => l.length === 240 && /^[\x20-\x7E]*$/.test(l) && !/[a-z]/.test(l)));
+    confere('CRLF entre as linhas e no fim (inclusive a última), sem LF sozinho',
+      t.texto.endsWith('\r\n') && t.texto.split('\r\n').length === 11 && !/[^\r]\n/.test(t.texto) && t.texto === L.join('\r\n') + '\r\n');
+    confere('Só entram boletos aprovados nas travas, na ordem do DDA (o reprovado fica fora)',
+      t.boletos.join() === [b1, b2, b3].join() && t.boletos.every(b => b !== ruim));
+
+    const [g1, h1, g2, h2] = L.slice(2, 6);
+    const c = (l, a, b) => l.slice(a - 1, b);
+    confere('G 1-17: 341, lote 0001, registro 3, sequencial 00001, G, espaço, movimento 01',
+      c(g1, 1, 17) === '341' + '0001' + '3' + '00001' + 'G' + ' ' + '01' && c(h1, 9, 14) === '00002H' && c(g2, 9, 14) === '00003G', c(g1, 1, 17));
+    confere('G 18-61 = o código de barras exatamente como veio do DDA', c(g1, 18, 61) === b1.codigoTexto && c(g2, 18, 61) === b2.codigoTexto);
+    confere('G 62-77: CNPJ → "2" + 15 dígitos; CPF → "1" + 15 dígitos',
+      c(g1, 62, 77) === '2' + '011222333000181' && c(g2, 62, 77) === '1' + '000012345678909', `${c(g1, 62, 77)} · ${c(g2, 62, 77)}`);
+    confere('G 78-107 nome: sem acento, maiúsculo, pontuação vira espaço, 30 posições',
+      c(g1, 78, 107) === 'ACAO   CIA  FICTICIA PECAS LTD', `"${c(g1, 78, 107)}"`);
+    confere('G 108-130: vencimento DDMMAAAA e "Até Venc." em centavos (15)',
+      c(g1, 108, 130) === '20112026' + '000000000123456' && c(g2, 108, 130) === '19112026' + '000000000009990', c(g1, 108, 130));
+    confere('G 148-157 Nº Doc.: a pontuação fica ("88790/1"); "0" vira vazio; maiúsculo e cortado em 10',
+      c(g1, 148, 157) === '88790/1   ' && c(g2, 148, 157) === ' '.repeat(10) && c(L[6], 148, 157) === 'NF 0000295', `"${c(g1, 148, 157)}" "${c(g2, 148, 157)}" "${c(L[6], 148, 157)}"`);
+    confere('G 131-147 e 158-240 com os valores fixos do layout',
+      c(g1, 131, 147) === '00' + '000000000000009' && c(g1, 158, 240) === '     ' + '000000' + ' '.repeat(9) + ' 102' + '0'.repeat(11) +
+      '00' + '0' + '0'.repeat(8) + '0 00000000000000' + '0'.repeat(11) + '0'.repeat(10));
+    const hEsperado = '341' + '0001' + '3' + '00004' + 'H' + ' ' + '01' + '0' + '0'.repeat(15) + ' '.repeat(40) + ' ' + '0'.repeat(23) + ' ' + '0'.repeat(23) +
+      '0' + '0'.repeat(23) + '0'.repeat(15) + ' '.repeat(80);
+    confere('H do boleto COM desconto ("A Pagar" menor): 18 "0", 19-33 zeros, 34-73 espaços (nem desconto nem sacador)', h2 === hEsperado, h2.slice(0, 80));
+    confere('H de todos os boletos iguais, só muda o sequencial', L.filter(l => l[13] === 'H').every(h => h.slice(0, 8) + h.slice(13) === hEsperado.slice(0, 8) + hEsperado.slice(13)));
+
+    const hm = new TextDecoder('latin1').decode(modeloRetFicticio([crvMatriz, crvFilial])).split('\r\n')[0];
+    confere('Header de arquivo = o do modelo, trocando só 144-151 data, 152-157 hora e 158-163 NSA',
+      L[0].slice(0, 143) === hm.slice(0, 143) && L[0].slice(163) === hm.slice(163) && c(L[0], 144, 163) === '25112026' + '143005' + '900001', c(L[0], 144, 163));
+    const loteFilial = modelo.lotes.find(l => l.cnpj === cnpjDaEmpresaNoRet(crvFilial)).linha;
+    confere('Header de lote = o do modelo da empresa escolhida (filial, que no modelo é o lote 0002), com 4-7 = "0001"',
+      L[1] === loteFilial.slice(0, 3) + '0001' + loteFilial.slice(7) && c(loteFilial, 4, 7) === '0002');
+    confere('Trailer de lote: 8 registros (2×3+2) e a soma em centavos (1.344,46)',
+      L[8] === '341' + '0001' + '5' + ' '.repeat(9) + '000008' + '000000000000134446' + '0'.repeat(18) + ' '.repeat(181), c(L[8], 18, 41));
+    confere('Trailer de arquivo: lote 000001 e 10 linhas', L[9] === '341' + '9999' + '9' + ' '.repeat(9) + '000001' + '000010' + ' '.repeat(211), c(L[9], 18, 29));
+    confere('Nome do arquivo: DDA_FILIAL_<menor vencimento>_TESTE.RET', t.nomeArquivo === 'DDA_FILIAL_19112026_TESTE.RET', t.nomeArquivo);
+
+    const comp = gera({ teste:false });
+    confere('Completo → os 4 aprovados (8 detalhes), 12 linhas, trailer de lote com 10 registros, nome COMPLETO',
+      comp.qtdBoletos === 4 && comp.linhas.length === 12 && c(comp.linhas[10], 18, 23) === '000010' && /_COMPLETO\.RET$/.test(comp.nomeArquivo), comp.nomeArquivo);
+    const daMatriz = gera({ empresa: crvMatriz });
+    confere('Empresa matriz → header de lote da matriz e nome DDA_MATRIZ_...', daMatriz.linhas[1].slice(18, 33) === cnpjDaEmpresaNoRet(crvMatriz) && /^DDA_MATRIZ_/.test(daMatriz.nomeArquivo));
+
+    const semContagem = gera({ leitura:{ contagem:{ ok:false } } });
+    confere('Contagem que não fecha → geração BLOQUEADA, mesmo com boletos aprovados', !!semContagem.bloqueio && !semContagem.texto && /contagem/.test(semContagem.bloqueio), semContagem.bloqueio);
+    const nenhum = gera({ travas: travasDdaRet([ruim]) });
+    confere('Nenhum boleto aprovado nas travas → geração BLOQUEADA', !!nenhum.bloqueio && /Nenhum boleto passou/.test(nenhum.bloqueio), nenhum.bloqueio);
+    const nsaGrande = gera({ nsa: 1234567 });
+    confere('NSA que não cabe em 6 posições → bloqueado (nada é cortado)', !!nsaGrande.bloqueio && !nsaGrande.texto, nsaGrande.bloqueio);
+    const copia = JSON.stringify([b1, b2, b3]);
+    gera({ teste:false });
+    confere('Gerar não muda nada dos boletos', JSON.stringify([b1, b2, b3]) === copia);
+  });
+
+  await teste('DDA → .RET: NSA', async () => {
+    const vazio = controleNsaVazio();
+    confere('Sem NSA usado → sugere 900001', proximoNsa(vazio) === 900001);
+    const usados = { versao:1, usados:[900001, 900005] };
+    confere('Com 900001 e 900005 usados → sugere 900006', proximoNsa(usados) === 900006);
+    confere('NSA bom → aceito', checaNsa('900002', usados).ok && checaNsa(' 900006 ', usados).nsa === 900006);
+    confere('NSA já usado → recusado, com a sugestão', !checaNsa('900005', usados).ok && /já foi usado.*900006/.test(checaNsa('900005', usados).motivo), checaNsa('900005', usados).motivo);
+    confere('NSA abaixo de 900001 (pode bater com os do banco) → recusado', !checaNsa('000741', usados).ok && /a partir de 900001/.test(checaNsa('741', usados).motivo));
+    confere('NSA com letra, vazio ou com 7 dígitos → recusado', !checaNsa('90000A', usados).ok && !checaNsa('', usados).ok && !checaNsa('9000001', usados).ok);
+    const guardado = localStorage.getItem(CHAVE_CONTROLE_NSA);
+    try{
+      localStorage.removeItem(CHAVE_CONTROLE_NSA);
+      await gravarNsaUsado(900003);
+      const c = await gravarNsaUsado(900001);
+      const lido = await lerControleNsa();
+      confere('Gravar NSA usado e ler de volta → a lista em ordem, sem repetir', JSON.stringify(lido) === JSON.stringify(c) && lido.usados.join() === '900001,900003' &&
+        (await gravarNsaUsado(900003)).usados.length === 2, JSON.stringify(lido));
+      localStorage.setItem(CHAVE_CONTROLE_NSA, '{estragado');
+      confere('Controle estragado → começa vazio', (await lerControleNsa()).usados.length === 0);
+    } finally {
+      if(guardado === null) localStorage.removeItem(CHAVE_CONTROLE_NSA); else localStorage.setItem(CHAVE_CONTROLE_NSA, guardado);
+    }
   });
 
   mostraResultados();

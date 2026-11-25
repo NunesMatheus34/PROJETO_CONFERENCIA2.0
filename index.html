@@ -378,6 +378,22 @@
         <div class="mensagem" id="retMemoriaAviso" role="status" hidden></div>
         <p class="info-resultado" id="retMemoriaStatus" aria-live="polite"></p>
         <div id="retNovos"></div>
+        <!-- geração do .RET (sub-etapa 5): NSA, os dois botões e o arquivo montado (só para ver) -->
+        <div class="bloco-gerar" id="retGerar">
+          <h2 class="bloco-gerar-titulo">Gerar o .RET</h2>
+          <div class="escolhas bloco-gerar-escolhas">
+            <label class="campo campo-nsa">
+              <span class="campo-rotulo">NSA (número do arquivo)</span>
+              <input type="text" class="campo-busca mono" id="retNsa" inputmode="numeric" maxlength="6" autocomplete="off" spellcheck="false">
+            </label>
+            <div class="acoes">
+              <button type="button" class="botao" id="retGerarTeste" disabled>Gerar teste (3 boletos)</button>
+              <button type="button" class="botao botao-principal" id="retGerarCompleto" disabled>Gerar completo</button>
+            </div>
+          </div>
+          <div class="mensagem" id="retGerarAviso" role="status" hidden></div>
+          <div id="retGerado"></div>
+        </div>
         <p class="info-resultado mono" id="retInfo"></p>
         <div class="tabela-caixa tabela-solta" id="retTabela"></div>
       </div>
@@ -492,6 +508,7 @@
 <script src="js/boleto.js"></script>
 <script src="js/cpf-cnpj.js"></script>
 <script src="js/memoria-fornecedores.js"></script>
+<script src="js/controle-nsa.js"></script>
 <script src="js/conferencias/dda.js"></script>
 <script src="js/conferencias/nomes.js"></script>
 <script src="js/conferencias/codigo-barras.js"></script>
@@ -499,6 +516,7 @@
 <script src="js/conferencias/boletos.js"></script>
 <script src="js/conferencias/dda-ret.js"></script>
 <script src="js/conferencias/dda-ret-alertas.js"></script>
+<script src="js/conferencias/gera-ret.js"></script>
 <script src="js/excel.js"></script>
 <script src="js/telas/resultado.js"></script>
 <script src="js/telas/dda-bradesco.js"></script>

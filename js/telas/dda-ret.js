@@ -14,6 +14,11 @@
    Sub-etapa 4: a lista amarela "Atenção antes de importar" (alertas de
    fraude) e a lista de fornecedores novos, com "Confirmei com o fornecedor".
    A memória de fornecedores é lida e gravada SÓ por js/memoria-fornecedores.js.
+   Sub-etapa 5: o NSA (único campo digitável da tela), "Gerar teste (3
+   boletos)" e "Gerar completo". Gerar só MOSTRA o arquivo montado: o
+   download (e o NSA marcado como usado) vem na sub-etapa 6, depois da
+   releitura do arquivo. Os botões ficam travados se a contagem não fecha,
+   se nenhum boleto passou nas travas ou se o NSA não serve.
    Trocar a empresa NÃO apaga os arquivos: as checagens são refeitas com a
    empresa nova. Nada na tela é editável; dado de arquivo vai por textContent.
    ===================================================================== */
@@ -24,7 +29,9 @@ const elRet = id => document.getElementById(id);
 // Estado da tela: empresa escolhida, modelo lido, DDA lido e a memória de fornecedores.
 // pedido: número da última leitura pedida por caixa (leitura antiga que termina depois é descartada).
 // fechaConfirmacao: fecha a confirmação "Você vai gravar..." aberta (só uma por vez).
-const telaRet = { empresa:null, modelo:null, dda:null, memoria:null, fechaConfirmacao:null, pedido:{ modelo:0, dda:0 } };
+// controleNsa: os NSAs já usados (js/controle-nsa.js); gerado: o último arquivo montado (só para ver).
+const telaRet = { empresa:null, modelo:null, dda:null, memoria:null, fechaConfirmacao:null, controleNsa:null, gerado:null,
+                  pedido:{ modelo:0, dda:0 } };
 
 // Põe no seletor só as empresas com Itaú (com "Escolha a empresa" no começo).
 function preencheEmpresasRet(){
@@ -108,6 +115,9 @@ function mostraLeituraRet(pronto){
   const l = telaRet.leitura;
   elRet('retLeitura').hidden = !l;
   telaRet.travas = l ? travasDdaRet(l.boletos) : null;
+  telaRet.gerado = null;
+  elRet('retGerado').replaceChildren();
+  atualizaGerarRet();
   if(!l){
     telaRet.alertas = null;
     ['retContagem', 'retTravas', 'retFora', 'retAtencao', 'retNovos', 'retTabela'].forEach(id => elRet(id).replaceChildren());
@@ -323,12 +333,53 @@ function pintaCaixaRet(id, lido, recusado){
   else { caixa.classList.remove('recusado'); caixa.classList.add('escolhido'); }
 }
 
+// Trava ou destrava "Gerar teste" e "Gerar completo" e diz por quê: precisa da contagem
+// fechada, de pelo menos um boleto aprovado nas travas (podeGerarRet) e de um NSA que sirva.
+function atualizaGerarRet(){
+  const pode = podeGerarRet(telaRet.leitura, telaRet.travas);
+  const nsa = checaNsa(elRet('retNsa').value, telaRet.controleNsa || controleNsaVazio());
+  const ok = pode.ok && nsa.ok;
+  elRet('retGerarTeste').disabled = elRet('retGerarCompleto').disabled = !ok;
+  if(ok) limpaMensagem(elRet('retGerarAviso'));
+  else mostraMensagem(elRet('retGerarAviso'), pode.ok ? 'aviso' : 'alerta', 'Geração travada: ' + (pode.ok ? nsa.motivo : pode.motivo));
+}
+
+// Monta o .RET (teste = só os 3 primeiros boletos aprovados) e MOSTRA: nome, quantidade,
+// total, linhas e o texto do arquivo. Não baixa nada nem gasta o NSA (isso é na sub-etapa 6).
+function gerarRet(teste){
+  const nsa = checaNsa(elRet('retNsa').value, telaRet.controleNsa || controleNsaVazio());
+  if(!nsa.ok){ atualizaGerarRet(); return; }
+  const r = geraRet({ modelo: telaRet.modelo, empresa: telaRet.empresa, leitura: telaRet.leitura, travas: telaRet.travas,
+                      nsa: nsa.nsa, agora: new Date(), teste });
+  telaRet.gerado = r.bloqueio ? null : r;
+  if(r.bloqueio){
+    mostraMensagem(elRet('retGerarAviso'), 'alerta', r.bloqueio);
+    elRet('retGerado').replaceChildren();
+    return;
+  }
+  const resumo = `${r.nomeArquivo} · ${r.qtdBoletos} boleto(s) · total "Até Venc." ${brl(r.total)} · ${r.linhas.length} linhas de 240 caracteres · NSA ${String(nsa.nsa).padStart(6, '0')}`;
+  elRet('retGerado').replaceChildren(criaCom('div', 'arquivo-gerado', [
+    ...checagensDom([{ tipo:'ok', titulo: teste ? 'Arquivo de teste montado' : 'Arquivo completo montado', texto: resumo }]),
+    cria('p', 'lista-novos-texto', 'Só para conferir: o download fica liberado na próxima sub-etapa, depois que o site reler o próprio arquivo, ' +
+      'conferir boleto por boleto contra o DDA e calcular o SHA-256. O NSA só é marcado como usado no download.'),
+    cria('pre', 'arquivo-gerado-previa mono', r.linhas.join('\n')),
+  ]));
+}
+
 // Liga o seletor, as duas caixas e o botão Recomeçar, e lê a memória de fornecedores.
 // Chamada uma vez pelo js/app.js.
 function iniciaTelaRet(){
   preencheEmpresasRet();
   telaRet.memoria = memoriaVazia();
   lerMemoriaFornecedores().then(m => { telaRet.memoria = m; mostraResumoMemoriaRet(); mostraAlertasRet(); });
+  elRet('retNsa').addEventListener('input', () => { telaRet.gerado = null; elRet('retGerado').replaceChildren(); atualizaGerarRet(); });
+  elRet('retGerarTeste').addEventListener('click', () => gerarRet(true));
+  elRet('retGerarCompleto').addEventListener('click', () => gerarRet(false));
+  lerControleNsa().then(c => {
+    telaRet.controleNsa = c;
+    if(!elRet('retNsa').value) elRet('retNsa').value = String(proximoNsa(c));
+    atualizaGerarRet();
+  });
   elRet('retEmpresa').addEventListener('change', trocaEmpresaRet);
   ligaCaixaEnvio(elRet('retCaixaModelo'), recebeModeloRet);
   ligaCaixaEnvio(elRet('retCaixaDda'), recebeDdaRet);

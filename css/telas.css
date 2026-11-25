@@ -143,6 +143,15 @@
 .confirma-memoria{padding:var(--esp-3);border:1px solid var(--aviso-texto);border-radius:var(--raio);background:var(--aviso-fundo);white-space:normal;max-width:420px}
 .confirma-memoria-texto{color:var(--aviso-texto);font-weight:500;margin-bottom:var(--esp-2)}
 .confirma-memoria .acoes{margin:0}
+/* DDA → .RET: geração (NSA, botões e o arquivo montado, só para ver) */
+.bloco-gerar{margin-top:var(--esp-5);padding:var(--esp-4);border:1px solid var(--borda);border-radius:var(--raio);background:var(--superficie)}
+.bloco-gerar-titulo{font-size:15px;font-weight:600;margin-bottom:var(--esp-3)}
+.bloco-gerar-escolhas{align-items:flex-end;margin-bottom:0}
+.campo-nsa{min-width:0;width:200px}
+.bloco-gerar .acoes{margin-top:0}
+#retGerarAviso:not([hidden]){margin-top:var(--esp-3)}
+.arquivo-gerado{margin-top:var(--esp-3)}
+.arquivo-gerado-previa{margin-top:var(--esp-2);max-height:360px;overflow:auto;padding:var(--esp-3);background:var(--superficie-suave);border:1px solid var(--borda);border-radius:var(--raio);font-size:12px;line-height:1.5;white-space:pre}
 .tabela .sub{display:block;font-size:12px;color:var(--texto-fraco);font-family:var(--fonte-texto)}
 .tabela .codigo{font-size:12px;word-break:break-all;min-width:200px}
 .tabela .sem-quebra{white-space:nowrap}
