@@ -148,6 +148,7 @@
   <symbol id="i-conferencias" viewBox="0 0 24 24"><rect x="5" y="4" width="14" height="17" rx="1.5"/><path d="M9 4v-.5h6V4M8.5 10.5l1.5 1.5 2.5-2.5M14 11h2M8.5 16l1.5 1.5 2.5-2.5M14 16.5h2"/></symbol>
   <symbol id="i-caixa" viewBox="0 0 24 24"><rect x="3.5" y="6.5" width="17" height="12" rx="1.5"/><path d="M3.5 10h17M15.5 14.5h2"/></symbol>
   <symbol id="i-relatorios" viewBox="0 0 24 24"><path d="M4 20h16M7 20v-6M11 20V9M15 20v-4M19 20V6"/></symbol>
+  <symbol id="i-adm" viewBox="0 0 24 24"><circle cx="9" cy="8.5" r="3.2"/><path d="M3.5 19.5c.6-3.2 2.8-5 5.5-5s4.9 1.8 5.5 5M15.5 5.5a3 3 0 0 1 0 6M17.5 14.8c1.7.6 2.8 2.2 3 4.7"/></symbol>
   <symbol id="i-seta" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></symbol>
   <symbol id="i-arquivo" viewBox="0 0 24 24"><path d="M14 3.5H7.5a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h9a2 2 0 0 0 2-2V8z"/><path d="M14 3.5V8h4.5M12 17.5v-6M9.5 14 12 11.5l2.5 2.5"/></symbol>
 </svg>
@@ -603,6 +604,29 @@
       </div>
     </section>
 
+    <!-- ===================== USUÁRIOS (Administração) =====================
+         Só para o adm (o grupo do menu some para os outros, e as regras do Firestore
+         recusam a leitura). Desenhada pelo js/telas/usuarios.js. -->
+    <section class="tela" id="tela-usuarios" aria-labelledby="titulo-usuarios" hidden>
+      <header class="tela-cabecalho">
+        <p class="sobretitulo">Administração</p>
+        <h1 id="titulo-usuarios">Usuários</h1>
+        <p class="tela-descricao">Libere quem criou conta, bloqueie quem não deve mais entrar e corrija o nome.
+           O login (embaixo do nome) é a conta de verdade e não muda: confira por ele quem é quem.</p>
+      </header>
+      <p class="mensagem mensagem-alerta" id="usuariosSemAcesso">Só o administrador vê esta tela.</p>
+      <div id="usuariosArea" hidden>
+        <p class="mensagem" id="usuariosMensagem" role="status" hidden></p>
+        <p class="usuarios-resumo" id="usuariosResumo"></p>
+        <div class="tabela-caixa tabela-solta">
+          <table class="tabela tabela-usuarios">
+            <thead><tr><th>Nome e login</th><th>Papel</th><th>Situação</th><th class="num">Último acesso</th><th>Ações</th></tr></thead>
+            <tbody id="usuariosCorpo"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
     <!-- ===================== PERFIL ===================== -->
     <section class="tela" id="tela-perfil" aria-labelledby="titulo-perfil" hidden>
       <header class="tela-cabecalho">
@@ -641,6 +665,15 @@
 
   </main>
 </div>
+
+<!-- confirmação na tela (js/telas/confirmacao.js), no lugar do confirm() do navegador -->
+<dialog class="confirmacao" id="confirmacao" aria-labelledby="confirmacaoTexto">
+  <p id="confirmacaoTexto"></p>
+  <div class="acoes">
+    <button type="button" class="botao" id="confirmacaoNao">Cancelar</button>
+    <button type="button" class="botao botao-alerta" id="confirmacaoSim">Confirmar</button>
+  </div>
+</dialog>
 
 <!-- ordem: formatos → leitura → empresas → bancos → boleto → regras → excel → telas → app (menu) -->
 <script src="js/leitura/formatos.js"></script>
@@ -682,9 +715,12 @@
 <script src="js/login/nome-email.js"></script>
 <script src="js/login/firebase.js"></script>
 <script src="js/login/cadastro.js"></script>
+<script src="js/login/usuarios.js"></script>
 <script src="js/login/conta.js"></script>
 <script src="js/telas/entrada.js"></script>
 <script src="js/telas/perfil.js"></script>
+<script src="js/telas/confirmacao.js"></script>
+<script src="js/telas/usuarios.js"></script>
 <script src="js/login/sessao.js"></script>
 </body>
 </html>

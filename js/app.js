@@ -25,6 +25,9 @@
    Para um grupo novo: acrescente um objeto { id, grupo, icone, telas: [...] }.
    Grupo ainda sem telas (telas: []) aparece fechado, com a etiqueta "em breve".
    Tela solta, fora de grupo (como Início): { tela, titulo, icone }.
+   Grupo com soAdm: true só aparece para o adm (classe "so-adm"; o CSS esconde
+   quando o body não tem "eh-adm"). Isso é só o caminho: quem protege os
+   dados do adm são as regras do firestore.rules.
    O ícone é o id de um <symbol> do topo do index.html.
    --------------------------------------------------------------------- */
 const MENU = [
@@ -39,6 +42,9 @@ const MENU = [
   ]},
   { id: 'caixa',      grupo: 'Caixa',      icone: 'i-caixa',      telas: [] },
   { id: 'relatorios', grupo: 'Relatórios', icone: 'i-relatorios', telas: [] },
+  { id: 'adm', grupo: 'Administração', icone: 'i-adm', soAdm: true, telas: [
+    { tela: 'usuarios', titulo: 'Usuários' },
+  ]},
 ];
 
 // Telas do rodapé do menu, separadas da lista principal. O Perfil abre pelo nome do usuário.
@@ -48,7 +54,7 @@ const MENU_RODAPE = [
 const TELA_PERFIL = { tela: 'perfil', titulo: 'Perfil' };
 
 // Grupos abertos na primeira visita (antes de o navegador lembrar alguma escolha).
-const GRUPOS_ABERTOS_PADRAO = ['conferencias', 'arquivos'];
+const GRUPOS_ABERTOS_PADRAO = ['conferencias', 'arquivos', 'adm'];
 const CHAVE_GRUPOS_ABERTOS = 'central-financeira.menu.grupos-abertos';
 
 // Lista plana de todas as telas, com o grupo de cada uma (para o caminho do topo).
@@ -109,7 +115,7 @@ function criaItemMenu(t){
 // Grupo sem telas fica fechado, travado e com a etiqueta "em breve".
 function criaGrupoMenu(g, abertos){
   const caixa = document.createElement('div');
-  caixa.className = 'menu-grupo';
+  caixa.className = 'menu-grupo' + (g.soAdm ? ' so-adm' : '');
 
   const botao = document.createElement('button');
   botao.type = 'button';
@@ -168,7 +174,7 @@ function montaInicio(){
   const area = document.getElementById('inicioGrupos');
   MENU.filter(item => item.telas).forEach(g => {
     const cartao = document.createElement('div');
-    cartao.className = 'bloco inicio-grupo';
+    cartao.className = 'bloco inicio-grupo' + (g.soAdm ? ' so-adm' : '');
     const titulo = document.createElement('h2');
     titulo.appendChild(criaIcone(g.icone));
     const nome = document.createElement('span');

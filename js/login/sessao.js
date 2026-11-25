@@ -27,6 +27,7 @@ function liberaSite(cadastro){
   siteLiberado = true;
   document.getElementById('usuarioNome').textContent = cadastro.nome || '';
   mostraPerfil(cadastro);
+  ajustaTelaUsuarios(cadastro, firebaseConectado().auth.currentUser.uid);   // só o adm vê a Administração
   escondeEntrada();
   document.body.classList.remove('travado');
 }
@@ -78,6 +79,7 @@ async function aoMudarLogin(usuario){
 function iniciaSessao(){
   iniciaTelaEntrada();
   iniciaTelaPerfil();
+  iniciaTelaUsuarios();
   document.getElementById('menuSair').addEventListener('click', saiDaConta);
   const fb = firebaseConectado();
   if(!fb){

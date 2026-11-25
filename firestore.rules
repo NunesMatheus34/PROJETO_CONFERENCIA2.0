@@ -99,17 +99,18 @@ service cloud.firestore {
               && loginDaConta())
         );
 
-      // ATUALIZAR (adm): o adm edita qualquer cadastro (liberar, bloquear,
-      // tornar adm), mas sem fugir do formato: os mesmos 6 campos, papel e
-      // status só com os valores conhecidos, nome válido, e login e criadoEm
-      // intocados (o adm não troca a identidade de ninguém).
+      // ATUALIZAR (adm — tela Administração › Usuários): o adm muda SÓ nome,
+      // status e papel (liberar, bloquear, editar o nome, tornar adm). Os outros
+      // campos (login, criadoEm, ultimoAcesso) ficam exatamente como estão:
+      // o adm não troca a identidade de ninguém nem mexe na data de acesso.
+      // Nome válido, papel e status só com os valores conhecidos.
       allow update: if ehAdm()
         && soCamposDoCadastro()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['nome', 'status', 'papel'])
         && nomeValido(request.resource.data.nome)
         && loginIntocado()
         && request.resource.data.papel in ['usuario', 'adm']
-        && request.resource.data.status in ['aguardando', 'liberado', 'bloqueado']
-        && request.resource.data.criadoEm == resource.data.criadoEm;
+        && request.resource.data.status in ['aguardando', 'liberado', 'bloqueado'];
 
       // APAGAR: ninguém apaga pelo site (nem o adm). Para tirar alguém, o adm
       // muda o status para "bloqueado"; apagar de vez só pelo console.

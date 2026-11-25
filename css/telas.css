@@ -270,3 +270,31 @@
 .perfil-lista{display:grid;grid-template-columns:max-content 1fr;gap:var(--esp-2) var(--esp-5);align-items:center}
 .perfil-lista dt{font-size:13px;font-weight:600;color:var(--texto-fraco)}
 .perfil-senha{max-width:440px}
+
+/* ---------- Administração › Usuários ---------- */
+/* grupo do menu e cartão da Início só para o adm (o body ganha "eh-adm" pela sessão) */
+body:not(.eh-adm) .so-adm{display:none}
+.usuarios-resumo{margin:var(--esp-4) 0 var(--esp-2);font-size:14px;color:var(--texto-fraco)}
+.tabela-usuarios .usuario-nome-celula{font-weight:500}
+.tabela-usuarios .usuario-acoes{white-space:nowrap}
+.tabela-usuarios .usuario-acoes .botao{padding:6px 12px;font-size:13px}
+.tabela-usuarios .usuario-acoes .botao + .botao{margin-left:var(--esp-2)}
+.usuario-editar{display:flex;flex-wrap:wrap;gap:var(--esp-2);align-items:center;margin-bottom:var(--esp-1)}
+.usuario-editar input{
+  font:inherit;font-size:14px;min-width:200px;padding:6px 8px;
+  border:1px solid var(--borda-forte);border-radius:var(--raio);
+}
+.usuario-editar input:focus{border-color:var(--destaque)}
+.usuario-editar .botao{padding:6px 12px;font-size:13px}
+
+/* ---------- Confirmação na tela (<dialog>) ---------- */
+.confirmacao{
+  max-width:420px;margin:auto;padding:var(--esp-5);
+  border:1px solid var(--borda);border-radius:var(--raio);
+  background:var(--superficie);color:var(--texto);box-shadow:0 8px 32px rgba(16,24,22,.2);
+}
+.confirmacao::backdrop{background:rgba(16,24,22,.4)}
+.confirmacao p{font-weight:600}
+.confirmacao .acoes{justify-content:flex-end}
+.botao-alerta{background:var(--alerta-texto);border-color:var(--alerta-texto);color:#fff}
+.botao-alerta:hover{background:var(--alerta-texto);filter:brightness(.9)}

@@ -115,6 +115,7 @@
      (só funções que não falam com o Firebase são chamadas aqui) -->
 <script src="../js/login/nome-email.js"></script>
 <script src="../js/login/cadastro.js"></script>
+<script src="../js/login/usuarios.js"></script>
 
 <script>
 /* ---------------------------------------------------------------------
@@ -278,6 +279,35 @@ async function rodaTestes(){
     confere('nome = o que a pessoa digitou, limpo', c.nome === 'Fulano de Tal');
     confere('Nasce "usuario" e "aguardando"', c.papel === 'usuario' && c.status === 'aguardando');
     confere('criadoEm e ultimoAcesso = a mesma hora do servidor', c.criadoEm === agora && c.ultimoAcesso === agora);
+  });
+
+  await teste('Adm › Usuários: mudança conferida antes de gravar', () => {
+    const u = { uid: 'u1', nome: 'Fulano de Tal', login: 'fulano.de.tal@conferencia.local', papel: 'usuario', status: 'aguardando' };
+    const lib = mudancaUsuario(u, { status: 'liberado' });
+    confere('Liberar → grava só { status: "liberado" }', JSON.stringify(lib.dados) === '{"status":"liberado"}', JSON.stringify(lib));
+    const nome = mudancaUsuario(u, { nome: '  Fulano   Tal  ' });
+    confere('Editar nome → grava só o nome, limpo', JSON.stringify(nome.dados) === '{"nome":"Fulano Tal"}', JSON.stringify(nome));
+    confere('Nome com 2 letras: recusado', !!mudancaUsuario(u, { nome: 'Fu' }).erro);
+    confere('Nome com 61 caracteres: recusado', !!mudancaUsuario(u, { nome: 'a'.repeat(61) }).erro);
+    confere('Login não muda por aqui (pedido com login é recusado)', !!mudancaUsuario(u, { login: 'outro@conferencia.local' }).erro);
+    confere('Situação desconhecida: recusada', !!mudancaUsuario(u, { status: 'ativo' }).erro);
+    confere('Nada mudou: não grava', !!mudancaUsuario(u, { status: 'aguardando' }).erro);
+  });
+
+  await teste('Adm › Usuários: tirar o próprio acesso pede confirmação', () => {
+    confere('Adm bloqueando a si mesmo → pede', tiraProprioAdm('a1', 'a1', { status: 'bloqueado' }));
+    confere('Adm deixando de ser adm → pede', tiraProprioAdm('a1', 'a1', { papel: 'usuario' }));
+    confere('Adm bloqueando outra pessoa → não pede', !tiraProprioAdm('u1', 'a1', { status: 'bloqueado' }));
+    confere('Adm editando o próprio nome → não pede', !tiraProprioAdm('a1', 'a1', { nome: 'Novo Nome' }));
+  });
+
+  await teste('Adm › Usuários: ordem da lista', () => {
+    const l = ordenaUsuarios([
+      { nome: 'Carla', status: 'bloqueado' }, { nome: 'Bruno', status: 'liberado' },
+      { nome: 'Zeca', status: 'aguardando' }, { nome: 'Ana', status: 'liberado' }, { nome: 'Davi', status: 'aguardando' },
+    ]);
+    confere('Aguardando primeiro, depois liberado, depois bloqueado; nome em ordem dentro de cada um',
+      l.map(u => u.nome).join(',') === 'Davi,Zeca,Ana,Bruno,Carla', l.map(u => u.nome).join(','));
   });
 
   // ---------- módulo de boleto (testes do projeto antigo) ----------
