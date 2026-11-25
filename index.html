@@ -617,6 +617,20 @@
       <p class="mensagem mensagem-alerta" id="usuariosSemAcesso">Só o administrador vê esta tela.</p>
       <div id="usuariosArea" hidden>
         <p class="mensagem" id="usuariosMensagem" role="status" hidden></p>
+        <!-- passo a passo do "Resetar acesso" (plano Spark: o site não apaga conta, o adm exclui no console) -->
+        <div class="bloco usuarios-reset" id="usuariosReset" hidden>
+          <h2>Resetar o acesso de <span id="resetNome"></span></h2>
+          <p>O cadastro já está <b>bloqueado</b> e marcado com o reset. Falta excluir a conta no Firebase:</p>
+          <ol>
+            <li><a id="resetLink" target="_blank" rel="noopener noreferrer"></a>.</li>
+            <li>Na busca, cole o login <span class="mono" id="resetLogin"></span>
+                <button type="button" class="botao" id="resetCopiar">Copiar login</button> <span id="resetCopiado" role="status"></span></li>
+            <li>Na linha dessa conta, abra o menu ⋮ e escolha <b>Excluir conta</b>. Confira o login antes de excluir.</li>
+            <li>Avise a pessoa para usar <b>Criar conta</b> com o <b>mesmo nome</b> e uma senha nova.</li>
+            <li>A conta nova aparece aqui em "Aguardando liberação" com a marca <b>pedido de reset</b>: clique em <b>Liberar</b>.</li>
+          </ol>
+          <div class="acoes"><button type="button" class="botao" id="resetFechar">Fechar</button></div>
+        </div>
         <p class="usuarios-resumo" id="usuariosResumo"></p>
         <div class="tabela-caixa tabela-solta">
           <table class="tabela tabela-usuarios">

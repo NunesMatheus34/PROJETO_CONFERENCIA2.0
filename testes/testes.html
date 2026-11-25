@@ -301,6 +301,39 @@ async function rodaTestes(){
     confere('Adm editando o próprio nome → não pede', !tiraProprioAdm('a1', 'a1', { nome: 'Novo Nome' }));
   });
 
+  await teste('Adm › Usuários: resetar acesso (pedido)', () => {
+    const u = { uid: 'u1', nome: 'Fulano de Tal', login: 'fulano.de.tal@conferencia.local', papel: 'usuario', status: 'liberado' };
+    const r = pedidoDeReset(u, 'a1');
+    confere('Reset → grava { status: "bloqueado", resetPedido: true }',
+      JSON.stringify(r.dados) === '{"status":"bloqueado","resetPedido":true}', JSON.stringify(r));
+    confere('Adm não reseta o próprio acesso', !!pedidoDeReset({ ...u, uid: 'a1' }, 'a1').erro);
+    confere('Cadastro sem login: recusado (não dá para saber qual conta excluir)', !!pedidoDeReset({ ...u, login: '' }, 'a1').erro);
+    confere('Reset já pedido: não pede de novo', !!pedidoDeReset({ ...u, resetPedido: true, status: 'bloqueado' }, 'a1').erro);
+    const cancela = mudancaUsuario({ ...u, status: 'bloqueado', resetPedido: true }, { status: 'liberado' });
+    confere('"Cancelar reset" (liberar o antigo) → tira a marca',
+      JSON.stringify(cancela.dados) === '{"status":"liberado","resetPedido":false}', JSON.stringify(cancela));
+    confere('Link do console = Authentication › Usuários do projeto',
+      linkConsoleContas('projeto-teste') === 'https://console.firebase.google.com/project/projeto-teste/authentication/users');
+  });
+
+  await teste('Adm › Usuários: resetar acesso (conta nova com o mesmo nome)', () => {
+    const LOGIN = 'fulano.de.tal@conferencia.local';
+    const antigo = { uid: 'velho', nome: 'Fulano de Tal', login: LOGIN, papel: 'adm', status: 'bloqueado', resetPedido: true };
+    const novo = { uid: 'novo', nome: 'Fulano de Tal', login: LOGIN, papel: 'usuario', status: 'aguardando' };
+    const outro = { uid: 'outro', nome: 'Fulano Tal', login: 'fulano.tal@conferencia.local', papel: 'usuario', status: 'aguardando' };
+    const pares = paresDeReset([antigo, novo, outro]);
+    confere('Cadastro novo com o MESMO login ganha a marca "pedido de reset"', pares.novo === antigo);
+    confere('Nome parecido com OUTRO login não ganha a marca', !('outro' in pares));
+    confere('Sem cadastro antigo com reset: ninguém marcado',
+      Object.keys(paresDeReset([{ ...antigo, resetPedido: false }, novo])).length === 0);
+    const c = conclusaoDeReset(novo, antigo);
+    confere('Liberar → libera o novo com o papel que tinha e apaga o antigo',
+      JSON.stringify(c.libera) === '{"status":"liberado","papel":"adm"}' && c.apaga === 'velho', JSON.stringify(c));
+    confere('Login diferente: recusado', !!conclusaoDeReset(outro, antigo).erro);
+    confere('Antigo sem reset pedido: recusado', !!conclusaoDeReset(novo, { ...antigo, resetPedido: false }).erro);
+    confere('Novo já liberado: recusado', !!conclusaoDeReset({ ...novo, status: 'liberado' }, antigo).erro);
+  });
+
   await teste('Adm › Usuários: ordem da lista', () => {
     const l = ordenaUsuarios([
       { nome: 'Carla', status: 'bloqueado' }, { nome: 'Bruno', status: 'liberado' },

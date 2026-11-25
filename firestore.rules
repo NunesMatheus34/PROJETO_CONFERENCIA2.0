@@ -9,7 +9,9 @@
 // Hoje só existe a coleção usuarios/{uid}, com:
 //   nome, login (o e-mail interno da conta, ex.: fulano.de.tal@conferencia.local),
 //   papel ("usuario" | "adm"), status ("aguardando" | "liberado" |
-//   "bloqueado"), criadoEm, ultimoAcesso.
+//   "bloqueado"), criadoEm, ultimoAcesso e, só depois de um "Resetar
+//   acesso" do adm, resetPedido (true = a conta vai ser excluída no console
+//   e recriada com o mesmo nome).
 // O "nome" é só o que a pessoa digitou; o "login" é conferido aqui contra o
 // e-mail da conta (request.auth.token.email), então é ele que diz quem é quem.
 // Coleção nova (histórico, controle do .RET...) só funciona depois de
@@ -100,21 +102,28 @@ service cloud.firestore {
         );
 
       // ATUALIZAR (adm — tela Administração › Usuários): o adm muda SÓ nome,
-      // status e papel (liberar, bloquear, editar o nome, tornar adm). Os outros
-      // campos (login, criadoEm, ultimoAcesso) ficam exatamente como estão:
-      // o adm não troca a identidade de ninguém nem mexe na data de acesso.
-      // Nome válido, papel e status só com os valores conhecidos.
+      // status, papel e resetPedido (liberar, bloquear, editar o nome, tornar
+      // adm, resetar acesso). Os outros campos (login, criadoEm, ultimoAcesso)
+      // ficam exatamente como estão: o adm não troca a identidade de ninguém
+      // nem mexe na data de acesso. Nome válido, papel e status só com os
+      // valores conhecidos. resetPedido é true/false, e true só junto com
+      // "bloqueado" (quem está com reset pedido não entra).
       allow update: if ehAdm()
-        && soCamposDoCadastro()
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['nome', 'status', 'papel'])
+        && request.resource.data.keys().hasOnly(['nome', 'login', 'papel', 'status', 'criadoEm', 'ultimoAcesso', 'resetPedido'])
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['nome', 'status', 'papel', 'resetPedido'])
         && nomeValido(request.resource.data.nome)
         && loginIntocado()
         && request.resource.data.papel in ['usuario', 'adm']
-        && request.resource.data.status in ['aguardando', 'liberado', 'bloqueado'];
+        && request.resource.data.status in ['aguardando', 'liberado', 'bloqueado']
+        && (!('resetPedido' in request.resource.data) || request.resource.data.resetPedido is bool)
+        && (request.resource.data.get('resetPedido', false) != true || request.resource.data.status == 'bloqueado');
 
-      // APAGAR: ninguém apaga pelo site (nem o adm). Para tirar alguém, o adm
-      // muda o status para "bloqueado"; apagar de vez só pelo console.
-      allow delete: if false;
+      // APAGAR: só o adm, e só o cadastro ANTIGO de um reset (resetPedido true
+      // e bloqueado), ao liberar o cadastro novo da mesma pessoa. Para tirar
+      // alguém do site, o adm bloqueia; apagar outro cadastro só pelo console.
+      allow delete: if ehAdm()
+        && resource.data.get('resetPedido', false) == true
+        && resource.data.status == 'bloqueado';
     }
 
     // ---------- todo o resto ----------

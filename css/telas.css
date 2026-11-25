@@ -298,3 +298,10 @@ body:not(.eh-adm) .so-adm{display:none}
 .confirmacao .acoes{justify-content:flex-end}
 .botao-alerta{background:var(--alerta-texto);border-color:var(--alerta-texto);color:#fff}
 .botao-alerta:hover{background:var(--alerta-texto);filter:brightness(.9)}
+
+/* Resetar acesso: marca no cadastro e passo a passo do console */
+.tabela-usuarios .usuario-marca{display:inline-block;margin-top:var(--esp-1)}
+.usuarios-reset{margin-top:var(--esp-4);border-left:4px solid var(--aviso-texto)}
+.usuarios-reset h2{margin-bottom:var(--esp-2)}
+.usuarios-reset ol{margin:var(--esp-3) 0 0 var(--esp-5);display:flex;flex-direction:column;gap:var(--esp-2)}
+.usuarios-reset li .botao{padding:4px 10px;font-size:13px;margin-left:var(--esp-2)}

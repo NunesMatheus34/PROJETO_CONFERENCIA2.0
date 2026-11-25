@@ -2,7 +2,8 @@
    TELA USUÁRIOS (Administração › Usuários) — só desenho
    Tabela com todos os cadastros: nome (editável) com o login embaixo
    (só leitura), papel, situação, último acesso e os botões Liberar,
-   Bloquear e Editar nome. As conferências e a gravação ficam no
+   Bloquear, Editar nome e Resetar acesso (com o passo a passo do console
+   do Firebase e a marca "pedido de reset" no cadastro novo). As conferências e a gravação ficam no
    js/login/usuarios.js; quem trava de verdade são as regras do Firestore.
    Tudo que vem do cadastro vai para a tela por textContent.
    A lista só é lida enquanto quem entrou é adm (a sessão liga e desliga).
@@ -12,6 +13,7 @@ let pararDeAcompanharUsuarios = null;
 let uidDoAdm = '';
 let usuarioEditando = '';    // uid da linha com o nome aberto para edição ('' = nenhuma)
 let ultimaListaUsuarios = [];
+let paresReset = {};         // { uidNovo: cadastroAntigo } dos resets em andamento
 
 // Formata a data do Firestore (Timestamp) como dd/mm/aaaa hh:mm; sem data, "—".
 function dataHoraTela(ts){
@@ -57,6 +59,67 @@ async function mudaUsuario(u, pedido, botao){
   }
 }
 
+// Pede confirmação, grava o pedido de reset e abre o passo a passo do console.
+async function resetaUsuario(u, botao){
+  const r = pedidoDeReset(u, uidDoAdm);
+  if(r.erro){ mensagemUsuarios(r.erro, 'alerta'); return; }
+  const ok = await pedeConfirmacao(`Resetar o acesso de ${u.nome || u.login}? A pessoa fica bloqueada até criar a conta de novo.`, 'Resetar acesso');
+  if(!ok) return;
+  botao.disabled = true;
+  try{
+    await gravaPedidoDeReset(u.uid, r.dados);
+    mensagemUsuarios('', 'ok');
+    mostraPassoAPasso({ ...u, ...r.dados });
+  }catch(err){
+    mensagemUsuarios(mensagemErroConta(err), 'alerta');
+    botao.disabled = false;
+  }
+}
+
+// Libera o cadastro novo de um reset: libera com o papel antigo e apaga o antigo (num lote só).
+async function concluiReset(novo, botao){
+  const r = conclusaoDeReset(novo, paresReset[novo.uid]);
+  if(r.erro){ mensagemUsuarios(r.erro, 'alerta'); return; }
+  botao.disabled = true;
+  try{
+    await gravaConclusaoDeReset(novo.uid, r);
+    escondePassoAPasso();
+    mensagemUsuarios(`Reset concluído: ${novo.nome || novo.login} liberado de novo.`, 'ok');
+  }catch(err){
+    mensagemUsuarios(mensagemErroConta(err), 'alerta');
+    botao.disabled = false;
+  }
+}
+
+// Mostra o passo a passo para o adm excluir a conta no console do Firebase.
+function mostraPassoAPasso(u){
+  const area = document.getElementById('usuariosReset');
+  document.getElementById('resetNome').textContent = u.nome || '';
+  document.getElementById('resetLogin').textContent = u.login || '';
+  const link = document.getElementById('resetLink');
+  link.href = linkConsoleContas(CONFIG_FIREBASE.projectId);
+  link.textContent = 'Abra Authentication › Usuários no console do Firebase';
+  document.getElementById('resetCopiado').textContent = '';
+  area.dataset.login = u.login || '';
+  area.hidden = false;
+  area.scrollIntoView({ block: 'nearest' });
+}
+
+// Fecha o passo a passo.
+function escondePassoAPasso(){
+  document.getElementById('usuariosReset').hidden = true;
+}
+
+// Copia o login do passo a passo (para colar na busca do console).
+async function copiaLoginReset(){
+  const aviso = document.getElementById('resetCopiado');
+  try{
+    if(!navigator.clipboard || !navigator.clipboard.writeText) throw new Error('sem acesso');
+    await navigator.clipboard.writeText(document.getElementById('usuariosReset').dataset.login || '');
+    aviso.textContent = 'Login copiado.';
+  }catch(e){ aviso.textContent = 'Não deu para copiar: selecione o login e copie à mão.'; }
+}
+
 // Célula do nome: o nome (ou a caixa de edição) e o login embaixo, sempre só leitura.
 function celulaNome(u){
   const td = elUsuarios('td', 'usuario-celula');
@@ -86,6 +149,8 @@ function celulaNome(u){
   // o login (e-mail interno) é a prova de quem é: mostrado, nunca editável
   td.appendChild(elUsuarios('span', 'sub mono', u.login || 'sem login gravado (entra uma vez para gravar)'));
   if(u.uid === uidDoAdm) td.appendChild(elUsuarios('span', 'sub', 'você'));
+  if(u.resetPedido === true) td.appendChild(elUsuarios('span', 'etiqueta st-aviso usuario-marca', 'reset pedido: excluir a conta no console'));
+  if(paresReset[u.uid]) td.appendChild(elUsuarios('span', 'etiqueta st-aviso usuario-marca', 'pedido de reset'));
   return td;
 }
 
@@ -98,9 +163,13 @@ function celulaAcoes(u){
     b.addEventListener('click', () => acao(b));
     td.appendChild(b);
   };
-  if(u.status !== 'liberado') botao('Liberar', 'botao-principal', b => mudaUsuario(u, { status: 'liberado' }, b));
+  if(paresReset[u.uid]) botao('Liberar', 'botao-principal', b => concluiReset(u, b));   // cadastro novo de um reset
+  else if(u.resetPedido === true) botao('Cancelar reset', '', b => mudaUsuario(u, { status: 'liberado' }, b));
+  else if(u.status !== 'liberado') botao('Liberar', 'botao-principal', b => mudaUsuario(u, { status: 'liberado' }, b));
   if(u.status !== 'bloqueado') botao('Bloquear', '', b => mudaUsuario(u, { status: 'bloqueado' }, b));
   if(usuarioEditando !== u.uid) botao('Editar nome', '', () => { usuarioEditando = u.uid; desenhaUsuarios(); });
+  if(u.resetPedido === true) botao('Ver passo a passo', '', () => mostraPassoAPasso(u));
+  else if(u.uid !== uidDoAdm && u.login && !paresReset[u.uid]) botao('Resetar acesso', '', b => resetaUsuario(u, b));
   return td;
 }
 
@@ -108,6 +177,7 @@ function celulaAcoes(u){
 function desenhaUsuarios(){
   const corpo = document.getElementById('usuariosCorpo');
   corpo.replaceChildren();
+  paresReset = paresDeReset(ultimaListaUsuarios);
   if(!ultimaListaUsuarios.length){
     const tr = elUsuarios('tr');
     const td = elUsuarios('td', 'vazio', 'Nenhum usuário cadastrado.');
@@ -153,7 +223,9 @@ function ajustaTelaUsuarios(cadastro, uid){
     err => mensagemUsuarios(mensagemErroConta(err), 'alerta'));
 }
 
-// Liga a caixa de confirmação. Chamada uma vez pela sessão.
+// Liga a caixa de confirmação e os botões do passo a passo. Chamada uma vez pela sessão.
 function iniciaTelaUsuarios(){
   iniciaConfirmacao();
+  document.getElementById('resetCopiar').addEventListener('click', copiaLoginReset);
+  document.getElementById('resetFechar').addEventListener('click', escondePassoAPasso);
 }
