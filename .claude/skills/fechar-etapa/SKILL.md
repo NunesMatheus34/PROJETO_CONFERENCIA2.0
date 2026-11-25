@@ -9,7 +9,7 @@ Faça nesta ordem e mostre o resultado de cada item:
 
 1. Rode testes/testes.html (sem navegador: Node com jsdom numa pasta FORA do git, como _referencia/numeros/)
    e mostre o placar. Algum teste vermelho: pare aqui e explique.
-2. Se a etapa trouxe ou mudou uma conferência, siga a skill conferir-numeros.
+2. Rode SEMPRE todos os scripts de _referencia/numeros/ (todas as conferências), não só os da tela mexida.
 3. Siga a skill revisao-seguranca nos arquivos alterados nesta etapa.
 4. Rode git status. Se aparecer .xlsx, .xls, .pdf, .RET ou qualquer coisa de EXEMPLOS/ ou _referencia/,
    PARE e avise: nada disso pode subir.

@@ -16,7 +16,7 @@ const SENHA_MINIMA = 8;
 
 // Tira os espaços das pontas e junta espaços repetidos num só.
 // É assim que o nome é guardado no cadastro e mostrado na tela.
-function limpaNome(nome){
+function limpaNomeDigitado(nome){
   return String(nome == null ? '' : nome).trim().replace(/\s+/g, ' ');
 }
 
@@ -24,7 +24,7 @@ function limpaNome(nome){
 // Aceita letras (com acento), números, espaço, hífen e ponto; o resto é recusado
 // em vez de sumir calado, para dois nomes diferentes não virarem o mesmo login sem aviso.
 function nomeParaLogin(nomeDigitado){
-  const nome = limpaNome(nomeDigitado);
+  const nome = limpaNomeDigitado(nomeDigitado);
   if(nome.length < NOME_MINIMO) return { erro: `Digite o nome com pelo menos ${NOME_MINIMO} letras.` };
   if(nome.length > NOME_MAXIMO) return { erro: `O nome pode ter no máximo ${NOME_MAXIMO} caracteres.` };
   if(!/^[\p{L}0-9 .-]+$/u.test(nome)) return { erro: 'Use no nome só letras, números, espaço, hífen ou ponto.' };

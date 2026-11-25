@@ -41,7 +41,7 @@ function ordenaUsuarios(lista){
 function mudancaUsuario(cadastro, pedido){
   const dados = {};
   if('nome' in pedido){
-    const nome = limpaNome(pedido.nome);
+    const nome = limpaNomeDigitado(pedido.nome);
     if(nome.length < NOME_MINIMO) return { erro: `O nome precisa ter pelo menos ${NOME_MINIMO} letras.` };
     if(nome.length > NOME_MAXIMO) return { erro: `O nome pode ter no máximo ${NOME_MAXIMO} caracteres.` };
     if(nome !== cadastro.nome) dados.nome = nome;

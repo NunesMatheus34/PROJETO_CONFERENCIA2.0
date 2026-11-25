@@ -238,6 +238,38 @@ function mostraResultados(){
   window.resultadoDosTestes = { total: resultados.length, falhas, resultados };
 }
 
+// Lê um arquivo do site como texto (para o teste de nomes globais repetidos).
+// Usa XMLHttpRequest: funciona pelo endereço http(s) e no executor sem navegador;
+// aberto direto do disco (file://), alguns navegadores não deixam ler.
+function leTextoDoSite(caminho){
+  return new Promise((ok, falha) => {
+    const x = new XMLHttpRequest();
+    x.open('GET', caminho);
+    x.onload = () => (x.status === 200 || (x.status === 0 && x.responseText)) ? ok(x.responseText) : falha(new Error(caminho + ': ' + x.status));
+    x.onerror = () => falha(new Error('não consegui ler ' + caminho));
+    x.send();
+  });
+}
+
+// Nomes globais declarados no começo da linha de um arquivo .js: function, async function,
+// const, let, var, class e "const { a, b } =". Todos os arquivos do site são <script> comuns,
+// então dividem o MESMO espaço de nomes: uma function repetida SUBSTITUI a outra sem erro.
+function nomesGlobaisDoArquivo(texto){
+  const nomes = [];
+  for(const m of texto.matchAll(/^(?:async\s+)?function\s*\*?\s*([A-Za-z_$][\w$]*)|^(?:const|let|var|class)\s+([A-Za-z_$][\w$]*)/gm))
+    nomes.push(m[1] || m[2]);
+  for(const m of texto.matchAll(/^(?:const|let|var)\s*\{([^}]*)\}/gm))
+    m[1].split(',').map(x => x.split(':').pop().trim()).filter(Boolean).forEach(n => nomes.push(n));
+  return nomes;
+}
+
+// Junta os nomes de vários arquivos e devolve os repetidos: [{ nome, arquivos:[...] }].
+function nomesGlobaisRepetidos(arquivos){
+  const onde = {};
+  arquivos.forEach(({ caminho, texto }) => nomesGlobaisDoArquivo(texto).forEach(n => (onde[n] = onde[n] || []).push(caminho)));
+  return Object.entries(onde).filter(([, l]) => l.length > 1).map(([nome, arquivos]) => ({ nome, arquivos }));
+}
+
 /* ---------------------------------------------------------------------
    TESTES — só dados fictícios
    --------------------------------------------------------------------- */
@@ -246,6 +278,43 @@ async function rodaTestes(){
   const ESP = { banco:'341', valor:1234.56, venc:'23/10/2026' };
   const CB = '34191160800001234561234567890123456789012345';
   const LINHA = '34191234546789012345767890123457116080000123456';
+
+  // ---------- nomes globais: dois arquivos de js/ não podem declarar o mesmo nome ----------
+  await teste('Nomes globais repetidos entre arquivos de js/', async () => {
+    const amostra = nomesGlobaisRepetidos([
+      { caminho: 'a.js', texto: 'function limpaNome(s){}\nconst X = 1;\n  function interna(){}' },
+      { caminho: 'b.js', texto: '// function limpaNome\nasync function limpaNome(n){}\nlet Y;' },
+    ]);
+    confere('O detector acha function repetida (e ignora comentário e função recuada)',
+      amostra.length === 1 && amostra[0].nome === 'limpaNome', JSON.stringify(amostra));
+    // todos os arquivos que o site carrega (os <script src="js/..."> do index.html)
+    let arquivos;
+    try{
+      const index = await leTextoDoSite('../index.html');
+      const caminhos = [...index.matchAll(/<script[^>]*\ssrc="(js\/[^"]+\.js)"/g)].map(m => m[1]);
+      arquivos = await Promise.all(caminhos.map(async c => ({ caminho: c, texto: await leTextoDoSite('../' + c) })));
+    }catch(err){
+      confere('Ler os arquivos do site', false, (err.message || err) + ' — abra os testes pelo endereço http(s) (GitHub Pages)');
+      return;
+    }
+    confere(`Leu os ${arquivos.length} arquivos de js/ que o index.html carrega`, arquivos.length >= 40, String(arquivos.length));
+    const repetidos = nomesGlobaisRepetidos(arquivos);
+    confere('Nenhuma function ou constante global declarada em dois arquivos', repetidos.length === 0,
+      repetidos.map(r => `${r.nome}: ${r.arquivos.join(', ')}`).join(' · '));
+  });
+
+  await teste('Conferência DDA: nome igual com maiúscula/minúscula diferente (com o login carregado)', () => {
+    // nome-email.js e dda.js estão os dois carregados nesta página: se um substituir a
+    // limpeza de nome do outro, este par volta a cair em "Nome divergente" (bug da Etapa 8)
+    confere('"P e F Prestadora E Comercio Ltda" × "P E F PRESTADORA E COMERCIO LTDA" → mesmo fornecedor',
+      nomesBatem('P e F Prestadora E Comercio Ltda', 'P E F PRESTADORA E COMERCIO LTDA'));
+    const r = conferir([{ beneficiario: 'P e F Prestadora E Comercio Ltda', valor: 332, venc: '20/11/2026' }],
+                       [{ nome: 'P E F PRESTADORA E COMERCIO LTDA', valor: 332, venc: '20/11/2026' }]);
+    confere('Na conferência: vai para "Conferidos", não para "Nome divergente"', r.ok.length === 1 && r.div.length === 0,
+      `conferidos ${r.ok.length} · nome divergente ${r.div.length}`);
+    confere('A limpeza do login continua separada (limpaNomeDigitado mantém maiúsculas)',
+      limpaNomeDigitado('  P e F  ') === 'P e F' && limpaNome('P e F') === 'P E F');
+  });
 
   // ---------- login: nome → e-mail interno (nomes fictícios) ----------
   await teste('Login: nome vira e-mail interno', () => {
