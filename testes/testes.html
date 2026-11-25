@@ -90,12 +90,14 @@
 <script src="../js/bancos/detecta.js"></script>
 <script src="../js/boleto.js"></script>
 <script src="../js/cpf-cnpj.js"></script>
+<script src="../js/memoria-fornecedores.js"></script>
 <script src="../js/conferencias/dda.js"></script>
 <script src="../js/conferencias/nomes.js"></script>
 <script src="../js/conferencias/codigo-barras.js"></script>
 <script src="../js/conferencias/relatorio-contra-relatorio.js"></script>
 <script src="../js/conferencias/boletos.js"></script>
 <script src="../js/conferencias/dda-ret.js"></script>
+<script src="../js/conferencias/dda-ret-alertas.js"></script>
 <script src="../js/excel.js"></script>
 <script src="../js/telas/resultado.js"></script>
 <!-- só para as colunas da tabela (o destaque vermelho); a tela não é ligada aqui -->
@@ -1317,6 +1319,135 @@ async function rodaTestes(){
       t.noArquivo.length === 2 && t.fora.length === 1 && t.comAviso.length === 1 && t.totalNoArquivo === 320 && t.totalFora === 160 &&
       t.noArquivo[0].boleto === lista[0] && t.fora[0].boleto === lista[1], `${t.noArquivo.length}/${t.fora.length}/${t.comAviso.length}`);
     confere('As travas não mudam nada do boleto (código, valor, vencimento, beneficiário)', JSON.stringify(lista) === copia);
+  });
+
+  await teste('DDA → .RET: memória de fornecedores', async () => {
+    const vazia = memoriaVazia();
+    const m1 = confirmaFornecedores(vazia, [{ documento:'11.222.333/0001-81', nome:'ALFA FICTICIA LTDA', banco:'341' }]);
+    confere('Confirmar um fornecedor novo → entra com o CPF/CNPJ sem pontuação, o nome e o banco; a memória antiga não muda',
+      m1.fornecedores['11222333000181'].nome === 'ALFA FICTICIA LTDA' && m1.fornecedores['11222333000181'].bancos.join() === '341' &&
+      Object.keys(vazia.fornecedores).length === 0, JSON.stringify(m1));
+    const m2 = confirmaFornecedores(m1, [{ documento:'11222333000181', nome:'OUTRO NOME', banco:'1' }]);
+    confere('Confirmar o mesmo CNPJ por outro banco → ganha o banco (com 3 dígitos), o nome guardado fica',
+      m2.fornecedores['11222333000181'].bancos.join() === '341,001' && m2.fornecedores['11222333000181'].nome === 'ALFA FICTICIA LTDA' &&
+      m1.fornecedores['11222333000181'].bancos.join() === '341', JSON.stringify(m2));
+    const m3 = confirmaFornecedores(m1, [{ documento:'11.222.333/0001-82', nome:'X', banco:'341' }, { documento:'', nome:'Y', banco:'341' }]);
+    confere('CPF/CNPJ com DV inválido ou vazio → não entra na memória', Object.keys(m3.fornecedores).length === 1);
+    confere('Nome procurado sem acento, caixa e espaços duplos', documentosDoNome(m1, ' alfa  fictícia ltda ').join() === '11222333000181');
+    const quando = new Date(2026, 10, 19, 9, 5).toISOString();
+    confere('Resumo da memória: quantos fornecedores e a data da última gravação',
+      resumoMemoriaFornecedores({ ...m2, atualizadaEm: quando }) === '1 fornecedor(es) · última gravação em 19/11/2026 às 09:05',
+      resumoMemoriaFornecedores({ ...m2, atualizadaEm: quando }));
+    confere('Resumo da memória vazia → "0 fornecedor(es) · nunca gravada neste computador"',
+      resumoMemoriaFornecedores(memoriaVazia()) === '0 fornecedor(es) · nunca gravada neste computador', resumoMemoriaFornecedores(memoriaVazia()));
+
+    const guardada = localStorage.getItem(CHAVE_MEMORIA_FORNECEDORES);
+    try{
+      const copiaM2 = JSON.stringify(m2);
+      const antes = Date.now();
+      const gravada = await gravarMemoriaFornecedores(m2);
+      const lida = await lerMemoriaFornecedores();
+      confere('Gravar e ler de volta → a mesma memória, carimbada com a data e hora da gravação',
+        gravada && JSON.stringify(lida) === JSON.stringify(gravada) && JSON.stringify(lida.fornecedores) === JSON.stringify(m2.fornecedores) &&
+        new Date(lida.atualizadaEm).getTime() >= antes - 1000 && new Date(lida.atualizadaEm).getTime() <= Date.now() + 1000, JSON.stringify(lida));
+      confere('Gravar não mexe na memória recebida (o carimbo vai só na cópia gravada)', JSON.stringify(m2) === copiaM2 && m2.atualizadaEm === undefined);
+      confere('Confirmar mais um fornecedor mantém a data da última gravação até gravar de novo',
+        confirmaFornecedores(gravada, [{ documento:'123.456.789-09', nome:'BETA FICTICIA ME', banco:'237' }]).atualizadaEm === gravada.atualizadaEm);
+      localStorage.setItem(CHAVE_MEMORIA_FORNECEDORES, '{estragado');
+      const estragada = await lerMemoriaFornecedores();
+      localStorage.setItem(CHAVE_MEMORIA_FORNECEDORES, JSON.stringify({ versao:2, fornecedores:{} }));
+      const outraVersao = await lerMemoriaFornecedores();
+      confere('Memória estragada ou de outra versão → começa vazia (todo fornecedor vira "novo")',
+        JSON.stringify(estragada) === JSON.stringify(vazia) && JSON.stringify(outraVersao) === JSON.stringify(vazia));
+    } finally {
+      if(guardada === null) localStorage.removeItem(CHAVE_MEMORIA_FORNECEDORES); else localStorage.setItem(CHAVE_MEMORIA_FORNECEDORES, guardada);
+    }
+  });
+
+  await teste('DDA → .RET: alertas de fraude', async () => {
+    const bol = (over) => ({ ...boletoFicticio({ beneficiario:'ALFA FICTICIA LTDA', doc:'NF1', valor:500.00 }), cnpj:'11.222.333/0001-81', ...over });
+    const itens = lista => lista.map(boleto => ({ boleto }));
+    const memoria = confirmaFornecedores(memoriaVazia(), [{ documento:'11.222.333/0001-81', nome:'ALFA FICTICIA LTDA', banco:'341' }]);
+
+    const igual = alertasDdaRet(itens([bol()]), memoria);
+    confere('Fornecedor conhecido, banco de costume, sem desconto → nenhum alerta e nenhum novo', igual.atencao.length === 0 && igual.novos.length === 0);
+
+    const outroBanco = bol({ banco:'001' });
+    const rBanco = alertasDdaRet(itens([outroBanco]), memoria);
+    confere('Fornecedor conhecido por um banco nunca visto → "Mudança de banco/CNPJ", com o botão Confirmei',
+      rBanco.porTipo.mudanca === 1 && /^Mudança de banco\/CNPJ: confirme com o fornecedor antes de pagar\. Banco 001 nunca visto/.test(rBanco.atencao[0].texto) &&
+      rBanco.atencao[0].confirmar && rBanco.atencao[0].confirmar.banco === '001', rBanco.atencao.map(a => a.texto).join(' / '));
+
+    const rCnpj = alertasDdaRet(itens([bol({ cnpj:'123.456.789-09' })]), memoria);
+    confere('Nome conhecido com CPF/CNPJ novo (o golpe do boleto trocado) → "Mudança de banco/CNPJ"',
+      rCnpj.porTipo.mudanca === 1 && /Este nome está na memória com outro CPF\/CNPJ \(11222333000181\)/.test(rCnpj.atencao[0].texto) && rCnpj.novos.length === 0,
+      rCnpj.atencao.map(a => a.texto).join(' / '));
+
+    const desconhecido = bol({ beneficiario:'BETA FICTICIA ME', cnpj:'123.456.789-09', banco:'237' });
+    const desconhecido2 = { ...boletoFicticio({ beneficiario:'BETA FICTICIA ME', doc:'NF9', valor:70.00, banco:'237' }), cnpj:'123.456.789-09' };
+    const rNovo = alertasDdaRet(itens([desconhecido, desconhecido2]), memoriaVazia());
+    confere('Fornecedor fora da memória → não é alerta: vai para "Fornecedores novos" (um por CPF/CNPJ, com os boletos)',
+      rNovo.atencao.length === 0 && rNovo.novos.length === 1 && rNovo.novos[0].boletos.length === 2 && rNovo.novos[0].bancos.join() === '237');
+    const m4 = confirmaFornecedores(memoriaVazia(), confirmacoesDosNovos(rNovo.novos));
+    confere('"Confirmei todos os novos" → o fornecedor entra na memória e deixa de ser novo',
+      alertasDdaRet(itens([desconhecido]), m4).novos.length === 0 && m4.fornecedores['12345678909'].bancos.join() === '237');
+
+    const nomes = ['XYZ FOMENTO MERCANTIL', 'FIDC FICTICIO', 'FUNDO FICTICIO DE INVESTIMENTO', 'FICTICIA FACTORING', 'FICTICIA SECURITIZADORA',
+                   'FICTICIA CREDITO', 'COBRANCAS FICTICIAS', 'FICTICIA PAGAMENTOS S.A.'];
+    const rFac = alertasDdaRet(itens(nomes.map(n => bol({ beneficiario:n }))), memoria);
+    confere('Factoring, FIDC, fundo, securitizadora, crédito, cobrança e instituição de pagamento → alerta em todos',
+      rFac.porTipo.factoring === nomes.length, String(rFac.porTipo.factoring));
+    const rAcred = alertasDdaRet(itens([bol({ beneficiario:'ACREDITAR FICTICIA LTDA' })]), memoria);
+    confere('"ACREDITAR" no nome (CRED no meio da palavra) → não é factoring', rAcred.porTipo.factoring === 0);
+
+    const a = bol(), repetido = { ...a };
+    const rMesmoCodigo = alertasDdaRet(itens([a, repetido]), memoria);
+    confere('O mesmo código de barras duas vezes → "Boleto duplicado" nos dois',
+      rMesmoCodigo.porTipo.duplicado === 2 && /O mesmo código de barras aparece 2 vezes/.test(rMesmoCodigo.atencao[0].texto), rMesmoCodigo.atencao.map(x => x.texto).join(' / '));
+    const rMesmoValor = alertasDdaRet(itens([bol(), bol()]), memoria);
+    confere('Mesmo beneficiário, valor e vencimento em códigos diferentes → "Boleto duplicado" nos dois',
+      rMesmoValor.porTipo.duplicado === 2 && /Mesmo beneficiário, valor \(R\$\s500,00\) e vencimento \(20\/11\/2026\) em 2 códigos diferentes/.test(rMesmoValor.atencao[0].texto),
+      rMesmoValor.atencao.map(x => x.texto).join(' / '));
+    const rOutroValor = alertasDdaRet(itens([bol(), bol({ ...boletoFicticio({ beneficiario:'ALFA FICTICIA LTDA', doc:'NF2', valor:500.01 }), cnpj:'11.222.333/0001-81' })]), memoria);
+    confere('Mesmo beneficiário com 1 centavo de diferença → não é duplicado', rOutroValor.porTipo.duplicado === 0);
+
+    const rDesc = alertasDdaRet(itens([bol({ valorAPagar:450 })]), memoria);
+    confere('"A Pagar" menor que "Até Venc." → "Desconto ou abatimento" com "pagar R$ 450,00"',
+      rDesc.porTipo.desconto === 1 && /: pagar R\$\s450,00\./.test(rDesc.atencao[0].texto), rDesc.atencao.map(x => x.texto).join(' / '));
+
+    const fac = { ...boletoFicticio({ beneficiario:'FICTICIA FACTORING', doc:'NF3', valor:80.00 }), cnpj:'11.222.333/0001-81' };
+    const varios = alertasDdaRet(itens([bol({ valorAPagar:450 }), fac]), memoria);
+    confere('Lista amarela na ordem dos tipos (factoring antes de desconto, mesmo vindo depois no DDA)',
+      varios.atencao.map(x => x.tipo).join() === 'factoring,desconto', varios.atencao.map(x => x.tipo).join());
+    const lista = [bol({ valorAPagar:450 })], copia = JSON.stringify(lista);
+    alertasDdaRet(itens(lista), memoria);
+    confere('Os alertas não mudam nada do boleto', JSON.stringify(lista) === copia);
+  });
+
+  await teste('DDA → .RET: "Confirmei todos" só com os novos sem alerta', async () => {
+    let doc = 0;
+    const cnpjs = ['11.222.333/0001-81', '123.456.789-09', '12.ABC.345/01DE-35', '529.982.247-25', '111.444.777-35', '987.654.321-00'];
+    const novo = (over) => ({ ...boletoFicticio({ beneficiario:`FORNECEDOR FICTICIO ${doc + 1}`, doc:'NF' + doc, valor: 100 + doc }), cnpj: cnpjs[doc++], ...over });
+    const limpo = novo(), fundo = novo({ beneficiario:'FUNDO FICTICIO DE INVESTIMENTO' }), desconto = novo({ valorAPagar: 50 });
+    const prorrogado = novo(), dupA = novo(), dupB = { ...dupA };
+    const itens = [limpo, fundo, desconto, prorrogado, dupA, dupB].map(boleto => ({ boleto, avisos: boleto === prorrogado ? ['vencimento do código diferente do DDA (boleto prorrogado?)'] : [] }));
+    const a = alertasDdaRet(itens, memoriaVazia());
+    const por = nome => a.novos.find(n => n.nome === nome);
+    confere('Cada fornecedor novo traz os alertas dos boletos dele (lista amarela e vencimento diferente)',
+      por(limpo.beneficiario).alertas.length === 0 &&
+      por('FUNDO FICTICIO DE INVESTIMENTO').alertas.join() === 'Factoring, fundo ou instituição de pagamento' &&
+      por(desconto.beneficiario).alertas.join() === 'Desconto ou abatimento' &&
+      por(prorrogado.beneficiario).alertas.join() === 'Vencimento do código diferente do DDA' &&
+      por(dupA.beneficiario).alertas.join() === 'Boleto duplicado',
+      a.novos.map(n => `${n.nome}: ${n.alertas.join('+') || '-'}`).join(' | '));
+    const sem = novosSemAlerta(a.novos);
+    confere('"Confirmei todos" leva SÓ o novo sem alerta (factoring, desconto, vencimento diferente e duplicado ficam de fora)',
+      sem.length === 1 && sem[0].nome === limpo.beneficiario, sem.map(n => n.nome).join(', '));
+    const m = confirmaFornecedores(memoriaVazia(), confirmacoesDosNovos(sem));
+    const depois = alertasDdaRet(itens, m);
+    confere('Depois do "Confirmei todos": os 4 com alerta continuam na lista de novos, para confirmar um por um',
+      Object.keys(m.fornecedores).length === 1 && depois.novos.length === 4 && novosSemAlerta(depois.novos).length === 0,
+      depois.novos.map(n => n.nome).join(', '));
   });
 
   mostraResultados();

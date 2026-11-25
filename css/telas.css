@@ -126,6 +126,23 @@
 .tabela .motivo-fora{display:block;color:var(--alerta-texto);font-weight:500}
 .tabela .motivo-fora + .motivo-fora{margin-top:var(--esp-1)}
 .tabela tr.linha-aviso td:first-child{box-shadow:inset 4px 0 0 var(--aviso-texto)}
+/* DDA → .RET: lista amarela "Atenção antes de importar" e lista (fechada) de fornecedores novos */
+.lista-atencao{margin-top:var(--esp-4);padding:var(--esp-4);border-radius:var(--raio);background:var(--aviso-fundo);border:1px solid var(--aviso-texto)}
+.lista-atencao-titulo{font-size:15px;font-weight:600;color:var(--aviso-texto)}
+.lista-atencao-resumo{margin:var(--esp-1) 0 var(--esp-3);color:var(--aviso-texto);font-size:13px}
+.tabela .atencao-tipo{font-weight:600;color:var(--aviso-texto)}
+#retAtencao > .checagens{margin-top:var(--esp-4)}
+#retMemoriaAviso:not([hidden]){margin-top:var(--esp-3)}
+.lista-novos{margin-top:var(--esp-4);padding:var(--esp-3) var(--esp-4);border:1px solid var(--borda);border-radius:var(--raio);background:var(--superficie)}
+.lista-novos-titulo{cursor:pointer;font-weight:600}
+.lista-novos-texto{margin:var(--esp-2) 0;color:var(--texto-fraco);font-size:13px}
+.lista-novos .acoes{margin-bottom:var(--esp-3)}
+.tabela .bloco-linha{display:block}
+#retMemoriaStatus{margin-top:var(--esp-4)}
+/* confirmação "Você vai gravar N fornecedores na memória" (no lugar do botão, sem alert do navegador) */
+.confirma-memoria{padding:var(--esp-3);border:1px solid var(--aviso-texto);border-radius:var(--raio);background:var(--aviso-fundo);white-space:normal;max-width:420px}
+.confirma-memoria-texto{color:var(--aviso-texto);font-weight:500;margin-bottom:var(--esp-2)}
+.confirma-memoria .acoes{margin:0}
 .tabela .sub{display:block;font-size:12px;color:var(--texto-fraco);font-family:var(--fonte-texto)}
 .tabela .codigo{font-size:12px;word-break:break-all;min-width:200px}
 .tabela .sem-quebra{white-space:nowrap}

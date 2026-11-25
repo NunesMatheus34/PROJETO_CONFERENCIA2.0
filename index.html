@@ -373,6 +373,11 @@
         <!-- travas de cada boleto (sub-etapa 3): resumo e a lista vermelha "Fora do arquivo" -->
         <div class="checagens" id="retTravas"></div>
         <div id="retFora"></div>
+        <!-- alertas de fraude (sub-etapa 4): lista amarela e fornecedores novos (memória) -->
+        <div id="retAtencao"></div>
+        <div class="mensagem" id="retMemoriaAviso" role="status" hidden></div>
+        <p class="info-resultado" id="retMemoriaStatus" aria-live="polite"></p>
+        <div id="retNovos"></div>
         <p class="info-resultado mono" id="retInfo"></p>
         <div class="tabela-caixa tabela-solta" id="retTabela"></div>
       </div>
@@ -486,12 +491,14 @@
 <script src="js/bancos/detecta.js"></script>
 <script src="js/boleto.js"></script>
 <script src="js/cpf-cnpj.js"></script>
+<script src="js/memoria-fornecedores.js"></script>
 <script src="js/conferencias/dda.js"></script>
 <script src="js/conferencias/nomes.js"></script>
 <script src="js/conferencias/codigo-barras.js"></script>
 <script src="js/conferencias/relatorio-contra-relatorio.js"></script>
 <script src="js/conferencias/boletos.js"></script>
 <script src="js/conferencias/dda-ret.js"></script>
+<script src="js/conferencias/dda-ret-alertas.js"></script>
 <script src="js/excel.js"></script>
 <script src="js/telas/resultado.js"></script>
 <script src="js/telas/dda-bradesco.js"></script>
