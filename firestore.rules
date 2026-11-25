@@ -11,7 +11,8 @@
 //   papel ("usuario" | "adm"), status ("aguardando" | "liberado" |
 //   "bloqueado"), criadoEm, ultimoAcesso e, só depois de um "Resetar
 //   acesso" do adm, resetPedido (true = a conta vai ser excluída no console
-//   e recriada com o mesmo nome).
+//   e recriada com o mesmo nome), e permissoes: { telas: [...], empresas: [...] }
+//   (só o adm grava; sem o campo = nenhuma tela e nenhuma empresa; o adm vê tudo).
 // O "nome" é só o que a pessoa digitou; o "login" é conferido aqui contra o
 // e-mail da conta (request.auth.token.email), então é ele que diz quem é quem.
 // Coleção nova (histórico, controle do .RET...) só funciona depois de
@@ -47,6 +48,18 @@ service cloud.firestore {
     // O nome é texto de 3 a 60 caracteres (o mesmo limite da tela de entrada).
     function nomeValido(nome) {
       return nome is string && nome.size() >= 3 && nome.size() <= 60;
+    }
+
+    // Permissões válidas: um mapa só com "telas" e "empresas", cada um uma lista
+    // com ids conhecidos (os mesmos do js/login/permissoes.js e do js/empresas.js).
+    function permissoesValidas(p) {
+      return p is map
+        && p.keys().hasOnly(['telas', 'empresas'])
+        && p.keys().hasAll(['telas', 'empresas'])
+        && p.telas is list && p.telas.size() <= 10
+        && p.telas.hasOnly(['conferencia-dda', 'codigo-barras', 'conferencia-boletos', 'dda-ret'])
+        && p.empresas is list && p.empresas.size() <= 10
+        && p.empresas.hasOnly(['crv-matriz', 'crv-filial', 'rubi-matriz', 'rubi-filial']);
     }
 
     // Os 6 campos do cadastro: nenhum a mais.
@@ -102,15 +115,16 @@ service cloud.firestore {
         );
 
       // ATUALIZAR (adm — tela Administração › Usuários): o adm muda SÓ nome,
-      // status, papel e resetPedido (liberar, bloquear, editar o nome, tornar
-      // adm, resetar acesso). Os outros campos (login, criadoEm, ultimoAcesso)
+      // status, papel, resetPedido e permissoes (liberar, bloquear, editar o
+      // nome, tornar adm, resetar acesso, marcar telas e empresas). Os outros campos (login, criadoEm, ultimoAcesso)
       // ficam exatamente como estão: o adm não troca a identidade de ninguém
       // nem mexe na data de acesso. Nome válido, papel e status só com os
       // valores conhecidos. resetPedido é true/false, e true só junto com
       // "bloqueado" (quem está com reset pedido não entra).
       allow update: if ehAdm()
-        && request.resource.data.keys().hasOnly(['nome', 'login', 'papel', 'status', 'criadoEm', 'ultimoAcesso', 'resetPedido'])
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['nome', 'status', 'papel', 'resetPedido'])
+        && request.resource.data.keys().hasOnly(['nome', 'login', 'papel', 'status', 'criadoEm', 'ultimoAcesso', 'resetPedido', 'permissoes'])
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['nome', 'status', 'papel', 'resetPedido', 'permissoes'])
+        && (!('permissoes' in request.resource.data) || permissoesValidas(request.resource.data.permissoes))
         && nomeValido(request.resource.data.nome)
         && loginIntocado()
         && request.resource.data.papel in ['usuario', 'adm']

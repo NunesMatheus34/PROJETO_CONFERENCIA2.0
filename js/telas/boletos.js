@@ -30,10 +30,11 @@ const MSG_VAZIO_BOL = {
 
 /* ---------- Escolha da empresa e arquivos ---------- */
 
-// Põe no seletor só as empresas com Itaú (com "Escolha a empresa" no começo).
+// Põe no seletor só as empresas com Itaú que a pessoa pode usar (js/login/permissoes.js),
+// com "Escolha a empresa" no começo. A sessão chama de novo depois do login.
 function preencheEmpresasBol(){
   const vazia = cria('option', '', 'Escolha a empresa'); vazia.value = '';
-  elBol('bolEmpresa').replaceChildren(vazia, ...empresasBoletos().map(e => {
+  elBol('bolEmpresa').replaceChildren(vazia, ...empresasBoletos().filter(empresaPermitida).map(e => {
     const o = cria('option', '', `${e.nome} (${e.cnpj})`); o.value = e.id; return o;
   }));
 }
@@ -41,7 +42,7 @@ function preencheEmpresasBol(){
 // Volta ao começo com a empresa do seletor: caixas vazias (travadas sem empresa), sem resultado.
 function recomecaBol(){
   telaBol.pedido++;
-  telaBol.empresa = EMPRESAS.find(e => e.id === elBol('bolEmpresa').value) || null;
+  telaBol.empresa = EMPRESAS.find(e => e.id === elBol('bolEmpresa').value && empresaPermitida(e)) || null;
   Object.assign(telaBol, { arquivoDda:null, arquivoSistema:null });
   const texto = telaBol.empresa ? 'Nenhum arquivo escolhido' : 'Escolha a empresa primeiro';
   preparaCaixaEnvio(elBol('bolCaixaDda'), !telaBol.empresa, texto);

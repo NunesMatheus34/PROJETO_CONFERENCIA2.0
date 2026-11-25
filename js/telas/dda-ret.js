@@ -38,10 +38,11 @@ const elRet = id => document.getElementById(id);
 const telaRet = { empresa:null, modelo:null, dda:null, memoria:null, fechaConfirmacao:null, controleNsa:null, gerado:null,
                   pedido:{ modelo:0, dda:0, gerar:0 } };
 
-// Põe no seletor só as empresas com Itaú (com "Escolha a empresa" no começo).
+// Põe no seletor só as empresas com Itaú que a pessoa pode usar (js/login/permissoes.js),
+// com "Escolha a empresa" no começo. A sessão chama de novo depois do login.
 function preencheEmpresasRet(){
   const vazia = cria('option', '', 'Escolha a empresa'); vazia.value = '';
-  elRet('retEmpresa').replaceChildren(vazia, ...empresasRet().map(e => {
+  elRet('retEmpresa').replaceChildren(vazia, ...empresasRet().filter(empresaPermitida).map(e => {
     const o = cria('option', '', `${e.nome} (${e.cnpj})`); o.value = e.id; return o;
   }));
 }
@@ -49,7 +50,7 @@ function preencheEmpresasRet(){
 // Empresa trocada: com empresa, destrava as caixas (mantendo os arquivos já lidos);
 // sem empresa, trava e esvazia as duas.
 function trocaEmpresaRet(){
-  telaRet.empresa = EMPRESAS.find(e => e.id === elRet('retEmpresa').value) || null;
+  telaRet.empresa = EMPRESAS.find(e => e.id === elRet('retEmpresa').value && empresaPermitida(e)) || null;
   if(!telaRet.empresa){ esvaziaRet(); return; }
   ['retCaixaModelo', 'retCaixaDda'].forEach(id => {
     const caixa = elRet(id);

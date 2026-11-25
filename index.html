@@ -197,6 +197,8 @@
         <p class="tela-descricao">Conferências e arquivos bancários. Os arquivos são lidos só neste navegador: nenhuma planilha, PDF ou boleto é enviado para servidor.</p>
       </header>
       <!-- um cartão por grupo do menu, montado pelo js/app.js a partir da lista MENU -->
+      <!-- aparece quando o adm ainda não marcou nenhuma tela para a pessoa (js/app.js) -->
+      <p class="mensagem mensagem-aviso" id="inicioSemTelas" hidden>Você ainda não tem telas liberadas. Fale com o administrador.</p>
       <div class="inicio-grupos" id="inicioGrupos"></div>
     </section>
 
@@ -631,10 +633,23 @@
           </ol>
           <div class="acoes"><button type="button" class="botao" id="resetFechar">Fechar</button></div>
         </div>
+        <!-- editor de permissões (js/telas/usuarios.js): telas e empresas que a pessoa pode usar -->
+        <div class="bloco usuarios-permissoes" id="usuariosPermissoes" hidden>
+          <h2>Permissões de <span id="permissoesNome"></span></h2>
+          <p class="campo-dica">Sem tela ou sem empresa marcada, a pessoa não consegue conferir nada. O adm vê tudo sem marcar.</p>
+          <div class="permissoes-colunas">
+            <fieldset><legend>Telas</legend><div id="permissoesTelas"></div></fieldset>
+            <fieldset><legend>Empresas</legend><div id="permissoesEmpresas"></div></fieldset>
+          </div>
+          <div class="acoes">
+            <button type="button" class="botao" id="permissoesCancelar">Cancelar</button>
+            <button type="button" class="botao botao-principal" id="permissoesSalvar">Salvar permissões</button>
+          </div>
+        </div>
         <p class="usuarios-resumo" id="usuariosResumo"></p>
         <div class="tabela-caixa tabela-solta">
           <table class="tabela tabela-usuarios">
-            <thead><tr><th>Nome e login</th><th>Papel</th><th>Situação</th><th class="num">Último acesso</th><th>Ações</th></tr></thead>
+            <thead><tr><th>Nome e login</th><th>Papel</th><th>Situação</th><th>Permissões</th><th class="num">Último acesso</th><th>Ações</th></tr></thead>
             <tbody id="usuariosCorpo"></tbody>
           </table>
         </div>
@@ -698,6 +713,7 @@
 <script src="js/leitura/ret.js"></script>
 <script src="js/leitura/sha256.js"></script>
 <script src="js/empresas.js"></script>
+<script src="js/login/permissoes.js"></script>
 <script src="js/bancos/itau.js"></script>
 <script src="js/bancos/santander.js"></script>
 <script src="js/bancos/bradesco.js"></script>

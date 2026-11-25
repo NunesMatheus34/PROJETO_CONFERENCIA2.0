@@ -240,10 +240,32 @@ function mostraTela(nome){
   mostraCaminho(t);
 }
 
-// Nome da tela que está no endereço (#nome), ou a primeira (Início) se o # for desconhecido.
+// Nome da tela que está no endereço (#nome), ou a primeira (Início) se o # for desconhecido
+// ou se a pessoa não tem permissão para ela (js/login/permissoes.js). Antes do login
+// ninguém está no site (tudo travado), então o # fica como veio, para o link direto valer depois.
 function telaDoEndereco(){
   const nome = location.hash.replace('#', '');
-  return TELAS.some(t => t.tela === nome) ? nome : TELAS[0].tela;
+  const conhecida = TELAS.some(t => t.tela === nome);
+  const liberada = !cadastroComPermissoes || telaPermitida(nome);
+  return conhecida && liberada ? nome : TELAS[0].tela;
+}
+
+// Esconde do menu e da Início as telas que a pessoa não pode abrir, e o grupo que ficar
+// sem nenhuma tela. Sem nenhuma tela liberada, a Início avisa. Chamada pela sessão
+// depois do login; em seguida acerta a tela do endereço (que pode ter sido proibida).
+function aplicaPermissoesMenu(){
+  document.querySelectorAll('.menu [data-tela], #inicioGrupos a').forEach(item => {
+    const tela = item.dataset.tela || item.getAttribute('href').replace('#', '');
+    const alvo = item.closest('li') || item;
+    alvo.hidden = !telaPermitida(tela);
+  });
+  document.querySelectorAll('.menu-grupo, .inicio-grupo').forEach(grupo => {
+    const itens = grupo.querySelectorAll('.menu-grupo-telas [data-tela], li');
+    if(itens.length) grupo.hidden = [...itens].every(i => (i.closest('li') || i).hidden);
+  });
+  const algumaTela = TELAS_COM_PERMISSAO.some(t => telaPermitida(t.tela));
+  document.getElementById('inicioSemTelas').hidden = algumaTela;
+  sincronizaTela();
 }
 
 // Acerta a tela com o endereço. Endereço sem # ou com # desconhecido é trocado

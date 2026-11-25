@@ -16,15 +16,33 @@
 let pararDeAcompanharCadastro = null;
 let siteLiberado = false;
 let avisoParaEntrada = '';   // aparece no formulário Entrar na próxima vez que ele for mostrado
+let permissoesAbertas = '';  // papel + permissões com que o site foi aberto (para notar mudança)
 
 // Esconde o menu e as telas (estado do começo da página).
 function travaSite(){
   document.body.classList.add('travado');
 }
 
-// Abre o site para quem está liberado: some a entrada, aparece o menu com o nome no rodapé.
+// Papel e permissões do cadastro num texto só, para comparar com o de quando o site abriu.
+function marcaPermissoes(cadastro){
+  return JSON.stringify([cadastro.papel, cadastro.permissoes || null]);
+}
+
+// Abre o site para quem está liberado: some a entrada, aparece o menu com o nome no rodapé,
+// só com as telas e empresas que a pessoa pode usar (js/login/permissoes.js).
+// Se o adm mudar o papel ou as permissões com o site aberto, a página recarrega
+// (como no bloqueio): nada do que estava aberto sobra com a permissão antiga.
 function liberaSite(cadastro){
+  if(siteLiberado && marcaPermissoes(cadastro) !== permissoesAbertas){ location.reload(); return; }
+  const primeiraVez = !siteLiberado;
   siteLiberado = true;
+  permissoesAbertas = marcaPermissoes(cadastro);
+  defineCadastroPermissoes(cadastro);
+  if(primeiraVez){
+    // os seletores foram montados antes do login (sem empresa nenhuma): monta de novo
+    preencheEmpresasBol(); preencheEmpresasRr(); preencheEmpresasRet(); trocaBancoDda();
+    aplicaPermissoesMenu();
+  }
   document.getElementById('usuarioNome').textContent = cadastro.nome || '';
   mostraPerfil(cadastro);
   ajustaTelaUsuarios(cadastro, firebaseConectado().auth.currentUser.uid);   // só o adm vê a Administração

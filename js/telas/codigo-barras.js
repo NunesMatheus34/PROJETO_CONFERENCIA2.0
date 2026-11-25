@@ -142,12 +142,13 @@ function elementosLadoRr(lado){
   return lado === 'a' ? { seletor: elCb('rrEmpresaA'), caixa: elCb('rrCaixaA') } : { seletor: elCb('rrEmpresaB'), caixa: elCb('rrCaixaB') };
 }
 
-// Põe as 4 empresas nos dois seletores (com "Escolha a empresa" no começo).
+// Põe nos dois seletores as empresas que a pessoa pode usar (js/login/permissoes.js),
+// com "Escolha a empresa" no começo. A sessão chama de novo depois do login.
 function preencheEmpresasRr(){
   ['a', 'b'].forEach(lado => {
     const sel = elementosLadoRr(lado).seletor;
     const vazia = cria('option', '', 'Escolha a empresa'); vazia.value = '';
-    sel.replaceChildren(vazia, ...EMPRESAS.map(e => { const o = cria('option', '', e.nome); o.value = e.id; return o; }));
+    sel.replaceChildren(vazia, ...EMPRESAS.filter(empresaPermitida).map(e => { const o = cria('option', '', e.nome); o.value = e.id; return o; }));
   });
 }
 
@@ -157,7 +158,7 @@ function recomecaLadoRr(lado){
   const s = telaRr.lados[lado];
   const { seletor, caixa } = elementosLadoRr(lado);
   s.pedido++;
-  s.empresa = EMPRESAS.find(e => e.id === seletor.value) || null;
+  s.empresa = EMPRESAS.find(e => e.id === seletor.value && empresaPermitida(e)) || null;
   s.titulos = null; s.alerta = '';
   preparaCaixaEnvio(caixa, !s.empresa, s.empresa ? 'Nenhum arquivo escolhido' : 'Escolha a empresa primeiro');
   apagaResultadoRr();

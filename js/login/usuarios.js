@@ -118,6 +118,7 @@ function conclusaoDeReset(novo, antigo){
   const papel = antigo.papel === 'adm' ? 'adm' : 'usuario';
   const libera = { status: 'liberado' };
   if(papel !== novo.papel) libera.papel = papel;
+  if(antigo.permissoes) libera.permissoes = antigo.permissoes;   // volta com as mesmas telas e empresas
   return { libera, apaga: antigo.uid };
 }
 

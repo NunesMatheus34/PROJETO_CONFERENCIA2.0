@@ -31,11 +31,12 @@ const elDda = id => document.getElementById(id);
 // Banco ('santander' | 'itau' | 'bradesco' | '') e empresa (da tabela EMPRESAS ou null) escolhidos no topo.
 function escolhaDda(){
   const banco = elDda('ddaBanco').value;
-  const empresa = EMPRESAS.find(e => e.id === elDda('ddaEmpresa').value) || null;
+  const empresa = EMPRESAS.find(e => e.id === elDda('ddaEmpresa').value && empresaPermitida(e)) || null;
   return { banco, empresa };
 }
 
-// Ao trocar o banco: a lista de empresas mostra só as que têm aquele banco.
+// Ao trocar o banco: a lista de empresas mostra só as que têm aquele banco e que a
+// pessoa pode usar (js/login/permissoes.js). A sessão chama de novo depois do login.
 // O Itaú mostra também o filtro de unidade do pagador.
 function trocaBancoDda(){
   const { banco } = escolhaDda();
@@ -46,7 +47,7 @@ function trocaBancoDda(){
   primeira.value = ''; primeira.textContent = banco ? 'Escolha a empresa' : 'Escolha o banco primeiro';
   sel.append(primeira);
   if(banco){
-    EMPRESAS.filter(e => e.bancos.includes(NOMES_BANCO[banco])).forEach(e => {
+    EMPRESAS.filter(e => e.bancos.includes(NOMES_BANCO[banco]) && empresaPermitida(e)).forEach(e => {
       const op = document.createElement('option');
       op.value = e.id; op.textContent = `${e.nome} · ${e.cnpj}`;
       sel.append(op);

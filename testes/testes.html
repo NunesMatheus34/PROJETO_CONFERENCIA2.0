@@ -87,6 +87,7 @@
 <script src="../js/leitura/ret.js"></script>
 <script src="../js/leitura/sha256.js"></script>
 <script src="../js/empresas.js"></script>
+<script src="../js/login/permissoes.js"></script>
 <script src="../js/bancos/itau.js"></script>
 <script src="../js/bancos/santander.js"></script>
 <script src="../js/bancos/bradesco.js"></script>
@@ -332,6 +333,41 @@ async function rodaTestes(){
     confere('Login diferente: recusado', !!conclusaoDeReset(outro, antigo).erro);
     confere('Antigo sem reset pedido: recusado', !!conclusaoDeReset(novo, { ...antigo, resetPedido: false }).erro);
     confere('Novo já liberado: recusado', !!conclusaoDeReset({ ...novo, status: 'liberado' }, antigo).erro);
+  });
+
+  await teste('Permissões: o que cada um vê', () => {
+    const adm = { papel: 'adm', status: 'liberado' };
+    const semCampo = { papel: 'usuario', status: 'liberado' };
+    const marcado = { papel: 'usuario', status: 'liberado', permissoes: { telas: ['conferencia-dda'], empresas: ['crv-matriz'] } };
+    confere('Adm vê todas as telas sem marcar nada', TELAS_COM_PERMISSAO.every(t => podeVerTela(adm, t.tela)));
+    confere('Adm usa todas as empresas sem marcar nada', EMPRESAS.every(e => podeUsarEmpresa(adm, e)));
+    confere('Sem permissões marcadas: nenhuma tela de conferência', TELAS_COM_PERMISSAO.every(t => !podeVerTela(semCampo, t.tela)));
+    confere('Sem permissões marcadas: nenhuma empresa', EMPRESAS.every(e => !podeUsarEmpresa(semCampo, e)));
+    confere('Sem permissões: Início, Ajuda e Perfil continuam', ['inicio', 'ajuda', 'perfil'].every(t => podeVerTela(semCampo, t)));
+    confere('Marcado: só a tela marcada', podeVerTela(marcado, 'conferencia-dda') && !podeVerTela(marcado, 'dda-ret'));
+    confere('Marcado: só a empresa marcada', podeUsarEmpresa(marcado, 'crv-matriz') && !podeUsarEmpresa(marcado, 'rubi-filial'));
+    confere('Bloqueado não vê nada, mesmo marcado', !podeVerTela({ ...marcado, status: 'bloqueado' }, 'conferencia-dda')
+      && !podeUsarEmpresa({ ...marcado, status: 'bloqueado' }, 'crv-matriz'));
+    confere('Adm bloqueado não vê nada', !podeVerTela({ ...adm, status: 'bloqueado' }, 'conferencia-dda'));
+    confere('Antes do login (sem cadastro): nenhuma empresa', !empresaPermitida(EMPRESAS[0]));
+  });
+
+  await teste('Permissões: gravação conferida', () => {
+    const u = { uid: 'u1', papel: 'usuario', status: 'liberado' };
+    const r = mudancaPermissoes(u, ['dda-ret', 'conferencia-dda'], ['rubi-filial', 'crv-matriz']);
+    confere('Grava só { permissoes: { telas, empresas } } na ordem oficial',
+      JSON.stringify(r.dados) === '{"permissoes":{"telas":["conferencia-dda","dda-ret"],"empresas":["crv-matriz","rubi-filial"]}}', JSON.stringify(r));
+    confere('Tela desconhecida: recusada', !!mudancaPermissoes(u, ['usuarios'], []).erro);
+    confere('Empresa desconhecida: recusada', !!mudancaPermissoes(u, [], ['crv-sp']).erro);
+    confere('Adm: nada a marcar', !!mudancaPermissoes({ ...u, papel: 'adm' }, [], []).erro);
+    confere('Desmarcar tudo (sem campo antes = já sem nada) grava a lista vazia',
+      JSON.stringify(mudancaPermissoes(u, [], []).dados) === '{"permissoes":{"telas":[],"empresas":[]}}');
+    confere('Resumo: sem nada = "Nenhuma" (alerta)', resumoPermissoes(u).texto === 'Nenhuma' && resumoPermissoes(u).classe === 'alerta');
+    confere('Resumo: adm = "Todas (adm)"', resumoPermissoes({ papel: 'adm' }).texto === 'Todas (adm)');
+    const antigo = { uid: 'v', login: 'x@conferencia.local', papel: 'usuario', status: 'bloqueado', resetPedido: true,
+                     permissoes: { telas: ['dda-ret'], empresas: ['crv-filial'] } };
+    const c = conclusaoDeReset({ uid: 'n', login: 'x@conferencia.local', papel: 'usuario', status: 'aguardando' }, antigo);
+    confere('Reset concluído volta com as mesmas permissões', c.libera.permissoes === antigo.permissoes, JSON.stringify(c));
   });
 
   await teste('Adm › Usuários: ordem da lista', () => {

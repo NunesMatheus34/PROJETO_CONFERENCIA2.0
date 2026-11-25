@@ -3,7 +3,8 @@
    Tabela com todos os cadastros: nome (editável) com o login embaixo
    (só leitura), papel, situação, último acesso e os botões Liberar,
    Bloquear, Editar nome e Resetar acesso (com o passo a passo do console
-   do Firebase e a marca "pedido de reset" no cadastro novo). As conferências e a gravação ficam no
+   do Firebase e a marca "pedido de reset" no cadastro novo) e Permissões
+   (telas e empresas que a pessoa pode usar; o adm vê tudo sem marcar). As conferências e a gravação ficam no
    js/login/usuarios.js; quem trava de verdade são as regras do Firestore.
    Tudo que vem do cadastro vai para a tela por textContent.
    A lista só é lida enquanto quem entrou é adm (a sessão liga e desliga).
@@ -14,6 +15,7 @@ let uidDoAdm = '';
 let usuarioEditando = '';    // uid da linha com o nome aberto para edição ('' = nenhuma)
 let ultimaListaUsuarios = [];
 let paresReset = {};         // { uidNovo: cadastroAntigo } dos resets em andamento
+let usuarioPermissoes = '';  // uid da pessoa com o editor de permissões aberto ('' = nenhuma)
 
 // Formata a data do Firestore (Timestamp) como dd/mm/aaaa hh:mm; sem data, "—".
 function dataHoraTela(ts){
@@ -50,7 +52,9 @@ async function mudaUsuario(u, pedido, botao){
   if(botao) botao.disabled = true;
   try{
     await gravaMudancaUsuario(u.uid, r.dados);
-    mensagemUsuarios('Alteração gravada: ' + (r.dados.nome || u.nome) + '.', 'ok');
+    const semPermissao = r.dados.status === 'liberado' && u.papel !== 'adm' && resumoPermissoes(u).classe === 'alerta';
+    if(semPermissao) mensagemUsuarios(`${u.nome || u.login} liberado, mas sem telas ou empresas marcadas: clique em "Permissões".`, 'aviso');
+    else mensagemUsuarios('Alteração gravada: ' + (r.dados.nome || u.nome) + '.', 'ok');
     return true;
   }catch(err){
     mensagemUsuarios(mensagemErroConta(err), 'alerta');
@@ -120,6 +124,56 @@ async function copiaLoginReset(){
   }catch(e){ aviso.textContent = 'Não deu para copiar: selecione o login e copie à mão.'; }
 }
 
+// Cria uma caixa de marcar (checkbox) com rótulo, para o editor de permissões.
+function marcador(valor, texto, marcado){
+  const label = elUsuarios('label', 'permissao-item');
+  const caixa = elUsuarios('input');
+  caixa.type = 'checkbox';
+  caixa.value = valor;
+  caixa.checked = marcado;
+  label.append(caixa, elUsuarios('span', '', texto));
+  return label;
+}
+
+// Abre o editor de permissões de uma pessoa (telas e empresas marcadas).
+function abrePermissoes(u){
+  usuarioPermissoes = u.uid;
+  const area = document.getElementById('usuariosPermissoes');
+  document.getElementById('permissoesNome').textContent = u.nome || u.login || '';
+  document.getElementById('permissoesTelas').replaceChildren(
+    ...TELAS_COM_PERMISSAO.map(t => marcador(t.tela, t.titulo, listaPermitida(u, 'telas').includes(t.tela))));
+  document.getElementById('permissoesEmpresas').replaceChildren(
+    ...EMPRESAS.map(e => marcador(e.id, `${e.nome} (${e.cnpj})`, listaPermitida(u, 'empresas').includes(e.id))));
+  document.getElementById('permissoesSalvar').disabled = false;
+  area.hidden = false;
+  area.scrollIntoView({ block: 'nearest' });
+}
+
+// Fecha o editor de permissões.
+function fechaPermissoes(){
+  usuarioPermissoes = '';
+  document.getElementById('usuariosPermissoes').hidden = true;
+}
+
+// Grava as permissões marcadas no editor.
+async function salvaPermissoes(){
+  const u = ultimaListaUsuarios.find(x => x.uid === usuarioPermissoes);
+  if(!u){ fechaPermissoes(); return; }
+  const marcadas = id => [...document.querySelectorAll('#' + id + ' input:checked')].map(c => c.value);
+  const r = mudancaPermissoes(u, marcadas('permissoesTelas'), marcadas('permissoesEmpresas'));
+  if(r.erro){ mensagemUsuarios(r.erro, 'alerta'); return; }
+  const botao = document.getElementById('permissoesSalvar');
+  botao.disabled = true;
+  try{
+    await gravaMudancaUsuario(u.uid, r.dados);
+    fechaPermissoes();
+    mensagemUsuarios('Permissões gravadas: ' + (u.nome || u.login) + '.', 'ok');
+  }catch(err){
+    mensagemUsuarios(mensagemErroConta(err), 'alerta');
+    botao.disabled = false;
+  }
+}
+
 // Célula do nome: o nome (ou a caixa de edição) e o login embaixo, sempre só leitura.
 function celulaNome(u){
   const td = elUsuarios('td', 'usuario-celula');
@@ -168,6 +222,7 @@ function celulaAcoes(u){
   else if(u.status !== 'liberado') botao('Liberar', 'botao-principal', b => mudaUsuario(u, { status: 'liberado' }, b));
   if(u.status !== 'bloqueado') botao('Bloquear', '', b => mudaUsuario(u, { status: 'bloqueado' }, b));
   if(usuarioEditando !== u.uid) botao('Editar nome', '', () => { usuarioEditando = u.uid; desenhaUsuarios(); });
+  if(u.papel !== 'adm' && !paresReset[u.uid]) botao('Permissões', '', () => abrePermissoes(u));
   if(u.resetPedido === true) botao('Ver passo a passo', '', () => mostraPassoAPasso(u));
   else if(u.uid !== uidDoAdm && u.login && !paresReset[u.uid]) botao('Resetar acesso', '', b => resetaUsuario(u, b));
   return td;
@@ -181,7 +236,7 @@ function desenhaUsuarios(){
   if(!ultimaListaUsuarios.length){
     const tr = elUsuarios('tr');
     const td = elUsuarios('td', 'vazio', 'Nenhum usuário cadastrado.');
-    td.colSpan = 5;
+    td.colSpan = 6;
     tr.appendChild(td);
     corpo.appendChild(tr);
     return;
@@ -194,6 +249,10 @@ function desenhaUsuarios(){
     const st = STATUS_CADASTRO[u.status];
     tdSt.appendChild(elUsuarios('span', 'etiqueta st-' + (st ? st.classe : 'neutro'), st ? st.nome : String(u.status || '')));
     tr.appendChild(tdSt);
+    const perm = resumoPermissoes(u);
+    const tdPerm = elUsuarios('td');
+    tdPerm.appendChild(elUsuarios('span', 'etiqueta st-' + perm.classe, perm.texto));
+    tr.appendChild(tdPerm);
     tr.appendChild(elUsuarios('td', 'num', dataHoraTela(u.ultimoAcesso)));
     tr.appendChild(celulaAcoes(u));
     corpo.appendChild(tr);
@@ -228,4 +287,6 @@ function iniciaTelaUsuarios(){
   iniciaConfirmacao();
   document.getElementById('resetCopiar').addEventListener('click', copiaLoginReset);
   document.getElementById('resetFechar').addEventListener('click', escondePassoAPasso);
+  document.getElementById('permissoesSalvar').addEventListener('click', salvaPermissoes);
+  document.getElementById('permissoesCancelar').addEventListener('click', fechaPermissoes);
 }

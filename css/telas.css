@@ -305,3 +305,12 @@ body:not(.eh-adm) .so-adm{display:none}
 .usuarios-reset h2{margin-bottom:var(--esp-2)}
 .usuarios-reset ol{margin:var(--esp-3) 0 0 var(--esp-5);display:flex;flex-direction:column;gap:var(--esp-2)}
 .usuarios-reset li .botao{padding:4px 10px;font-size:13px;margin-left:var(--esp-2)}
+
+/* Permissões: editor com duas colunas de caixas de marcar */
+.usuarios-permissoes{margin-top:var(--esp-4);border-left:4px solid var(--destaque)}
+.usuarios-permissoes h2{margin-bottom:var(--esp-1)}
+.permissoes-colunas{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:var(--esp-4);margin-top:var(--esp-3)}
+.permissoes-colunas fieldset{border:1px solid var(--borda);border-radius:var(--raio);padding:var(--esp-3) var(--esp-4)}
+.permissoes-colunas legend{font-size:13px;font-weight:600;color:var(--texto-fraco);padding:0 var(--esp-1)}
+.permissao-item{display:flex;align-items:center;gap:var(--esp-2);padding:var(--esp-1) 0;cursor:pointer}
+.permissao-item input{accent-color:var(--destaque);width:16px;height:16px}
